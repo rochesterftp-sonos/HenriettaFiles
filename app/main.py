@@ -643,20 +643,28 @@ def render_orders_table(df):
             red_color = '#CC0000'    # Dark red
             green_color = '#228B22'  # Forest green
             default_color = '#333333'
+            base_text_color = '#333333'
         else:
             # Colors for dark theme - lighter/brighter for visibility
             status_text_colors = {
                 'unengineered': '#64B5F6',  # Light blue
                 'in_work': '#81C784',       # Light green
-                'not_started': '#BDBDBD',   # Light gray
+                'not_started': '#E0E0E0',   # Light gray
                 'no_job': '#FFB74D',        # Light orange
             }
             red_color = '#EF5350'    # Light red
             green_color = '#81C784'  # Light green
-            default_color = '#BDBDBD'
+            default_color = '#E0E0E0'
+            base_text_color = '#E0E0E0'  # Light text for dark background
 
         color = status_text_colors.get(status, default_color)
-        styles = [''] * len(row)
+
+        # In dark mode, apply base text color to ALL cells for visibility
+        if current_theme == 'dark':
+            styles = [f'color: {base_text_color}'] * len(row)
+        else:
+            styles = [''] * len(row)
+
         job_idx = list(row.index).index('Job')
         olr_idx = list(row.index).index('Order-L-R')
         rem_idx = list(row.index).index('Remaining')
@@ -671,7 +679,13 @@ def render_orders_table(df):
         return styles
 
     # Style the dataframe
-    styled_df = display_df.style.apply(color_job_columns, axis=1)
+    if current_theme == 'dark':
+        # For dark mode, set background and default text color for entire dataframe
+        styled_df = display_df.style\
+            .set_properties(**{'background-color': '#2D2D2D', 'color': '#E0E0E0'})\
+            .apply(color_job_columns, axis=1)
+    else:
+        styled_df = display_df.style.apply(color_job_columns, axis=1)
 
     # Display the table with row selection enabled
     # Key includes theme so selection clears when theme changes
@@ -817,20 +831,56 @@ def apply_theme_css():
             color: white;
         }
 
-        /* Dataframe */
-        .stDataFrame {
-            background-color: #2D2D2D;
-        }
-        [data-testid="stDataFrame"] div {
+        /* Dataframe - comprehensive styling */
+        .stDataFrame, [data-testid="stDataFrame"] {
             background-color: #2D2D2D !important;
         }
-        [data-testid="stDataFrame"] th {
+
+        /* Target the actual table elements inside the dataframe */
+        [data-testid="stDataFrame"] table {
+            background-color: #2D2D2D !important;
+        }
+        [data-testid="stDataFrame"] thead tr th {
             background-color: #383838 !important;
             color: #E0E0E0 !important;
         }
-        [data-testid="stDataFrame"] td {
+        [data-testid="stDataFrame"] tbody tr td {
             background-color: #2D2D2D !important;
             color: #E0E0E0 !important;
+        }
+        [data-testid="stDataFrame"] tbody tr:hover td {
+            background-color: #404040 !important;
+        }
+
+        /* Glide data grid (used by newer Streamlit versions) */
+        [data-testid="stDataFrame"] .dvn-scroller {
+            background-color: #2D2D2D !important;
+        }
+        [data-testid="stDataFrame"] .dvn-underlay {
+            background-color: #2D2D2D !important;
+        }
+        [data-testid="stDataFrame"] [class*="cell"] {
+            background-color: #2D2D2D !important;
+            color: #E0E0E0 !important;
+        }
+        [data-testid="stDataFrame"] [class*="header"] {
+            background-color: #383838 !important;
+            color: #E0E0E0 !important;
+        }
+
+        /* Data editor cells */
+        .gdg-cell {
+            background-color: #2D2D2D !important;
+            color: #E0E0E0 !important;
+        }
+        .gdg-header-cell {
+            background-color: #383838 !important;
+            color: #E0E0E0 !important;
+        }
+
+        /* Canvas-based grid text */
+        [data-testid="stDataFrame"] canvas {
+            filter: none !important;
         }
 
         /* Metrics */
