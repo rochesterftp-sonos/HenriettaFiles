@@ -16,7 +16,7 @@ from config.settings import (
     APP_TITLE, PAGE_ICON, COLORS, STATUS_NAMES,
     REFRESH_INTERVAL, DRAWING_URL_PATTERN, PO_URL_PATTERN
 )
-from app.utils.data_loader import load_all_data
+from app.utils.data_loader import load_all_data, get_job_operations, get_material_shortage_details
 from app.utils.database import init_database, add_note, get_notes, get_notes_count
 
 # Page configuration
@@ -41,7 +41,8 @@ if 'filters' not in st.session_state:
         'can_ship': False,
         'esi': 'All',
         'customer': 'All',
-        'date_range': None
+        'date_range': None,
+        'remaining': 'All'  # All, Material Shortage, Can Ship
     }
 if 'selected_job' not in st.session_state:
     st.session_state.selected_job = None
@@ -96,6 +97,12 @@ def apply_filters(df):
     if st.session_state.filters['customer'] != 'All':
         filtered_df = filtered_df[filtered_df['Name'] == st.session_state.filters['customer']]
 
+    # Remaining column filter (by color/status)
+    if st.session_state.filters.get('remaining') == 'Material Shortage':
+        filtered_df = filtered_df[filtered_df['MaterialShort'] == True]
+    elif st.session_state.filters.get('remaining') == 'Can Ship':
+        filtered_df = filtered_df[filtered_df['CanShip'] == True]
+
     return filtered_df
 
 
@@ -143,24 +150,47 @@ def render_filter_bar(df):
             st.session_state.filters['in_work'] = not st.session_state.filters['in_work']
             st.rerun()
 
-    # with col3:
-    #     canship_count = len(df[df['Status'] == 'can_ship'])
-    #     if st.button(
-    #         f"📦 Can Ship ({canship_count})",
-    #         type="primary" if st.session_state.filters['can_ship'] else "secondary",
-    #         use_container_width=True
-    #     ):
-    #         st.session_state.filters['can_ship'] = not st.session_state.filters['can_ship']
-    #         st.rerun()
+    with col3:
+        # Remaining column filter (by color)
+        shortage_count = len(df[df['MaterialShort'] == True])
+        canship_count = len(df[df['CanShip'] == True])
+        remaining_options = [
+            'All',
+            f'Material Shortage ({shortage_count})',
+            f'Can Ship ({canship_count})'
+        ]
+        # Map display names to filter values
+        remaining_map = {
+            'All': 'All',
+            f'Material Shortage ({shortage_count})': 'Material Shortage',
+            f'Can Ship ({canship_count})': 'Can Ship'
+        }
+        current_remaining = st.session_state.filters.get('remaining', 'All')
+        # Find display option for current filter
+        display_option = 'All'
+        for opt, val in remaining_map.items():
+            if val == current_remaining:
+                display_option = opt
+                break
+        remaining_selection = st.selectbox(
+            "Material Status",
+            remaining_options,
+            index=remaining_options.index(display_option) if display_option in remaining_options else 0,
+            placeholder="Material Status"
+        )
+        new_remaining = remaining_map.get(remaining_selection, 'All')
+        if new_remaining != current_remaining:
+            st.session_state.filters['remaining'] = new_remaining
+            st.rerun()
 
     with col4:
         esi_options = ['All', 'ESI Only', 'Non-ESI Only']
         current_esi = st.session_state.filters['esi']
         esi_selection = st.selectbox(
-            "ESI Filter",
+            "Sub Company",
             esi_options,
             index=esi_options.index(current_esi),
-            label_visibility="collapsed"
+            placeholder="Sub Company"
         )
         if esi_selection != current_esi:
             st.session_state.filters['esi'] = esi_selection
@@ -172,10 +202,10 @@ def render_filter_bar(df):
         if current_customer not in customers:
             current_customer = 'All'
         customer_selection = st.selectbox(
-            "Customer Filter",
+            "Customer",
             customers,
             index=customers.index(current_customer),
-            label_visibility="collapsed"
+            placeholder="Customer"
         )
         if customer_selection != current_customer:
             st.session_state.filters['customer'] = customer_selection
@@ -189,7 +219,8 @@ def render_filter_bar(df):
                 'can_ship': False,
                 'esi': 'All',
                 'customer': 'All',
-                'date_range': None
+                'date_range': None,
+                'remaining': 'All'
             }
             st.rerun()
 
@@ -254,55 +285,332 @@ def show_notes_dialog(job, part, description):
                 st.rerun()
 
 
+def show_job_detail_dialog(row_data):
+    """Show job detail modal dialog"""
+    job = row_data.get('Job', 'N/A')
+    order_lr = row_data.get('OrderLineRel', 'N/A')
+
+    @st.dialog(f"Job Details - {order_lr}", width="large")
+    def job_detail_modal():
+        # Header with status
+        status = row_data.get('Status', 'unknown')
+        status_color = get_status_color(status, st.session_state.theme)
+        status_name = STATUS_NAMES.get(status, status.title())
+
+        st.markdown(f"""
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin: 0;">Job: {job}</h3>
+            <span style="background-color: {status_color}; padding: 8px 16px; border-radius: 12px; font-weight: 600;">{status_name}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Job Information
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### Order Information")
+            st.markdown(f"**Order-Line-Rel:** {order_lr}")
+            st.markdown(f"**Part:** {row_data.get('Part', 'N/A')}")
+            st.markdown(f"**Description:** {row_data.get('Description', 'N/A')}")
+            st.markdown(f"**Customer:** {row_data.get('Name', 'N/A')}")
+
+        with col2:
+            st.markdown("#### Quantities & Dates")
+            st.markdown(f"**Order Qty:** {row_data.get('Order Qty', 0)}")
+            st.markdown(f"**Completed:** {row_data.get('Qty Completed', 0)}")
+            st.markdown(f"**Remaining:** {row_data.get('Rem Qty', 0)}")
+            st.markdown(f"**Ship By:** {row_data.get('Ship By_Display', 'N/A')}")
+            st.markdown(f"**Need By:** {row_data.get('Need By_Display', 'N/A')}")
+
+        st.markdown("---")
+
+        # Status Details
+        col3, col4 = st.columns(2)
+        with col3:
+            st.markdown("#### Status Details")
+            eng = row_data.get('Engineered', False)
+            rel = row_data.get('Released', False)
+            st.markdown(f"**Engineered:** {'✅ Yes' if eng == True else '❌ No'}")
+            st.markdown(f"**Released:** {'✅ Yes' if rel == True else '❌ No'}")
+            labor_type = row_data.get('Labor Type', '')
+            if labor_type:
+                st.markdown(f"**Labor Type:** {labor_type}")
+
+        with col4:
+            st.markdown("#### Labor History")
+            last_labor = row_data.get('LastLaborDate_Display', '')
+            total_hours = row_data.get('TotalLaborHours', 0)
+            st.markdown(f"**Last Labor Date:** {last_labor if last_labor else 'None'}")
+            if total_hours:
+                st.markdown(f"**Total Labor Hours:** {total_hours:.2f}")
+
+        st.markdown("---")
+
+        # Operations Section
+        if job != 'No Job':
+            st.markdown("#### Operations")
+            operations_df = get_job_operations(job)
+            if not operations_df.empty:
+                # Rename columns for display
+                display_ops = operations_df.copy()
+                col_rename = {
+                    'Opr': 'Op #',
+                    'Operation Description': 'Description',
+                    'Qty Completed': 'Completed',
+                    'Run Qty': 'Run Qty',
+                    'Est. Prod Hours': 'Est Hrs',
+                    'Est. Setup Hours': 'Setup Hrs',
+                    'Labor Type': 'Type',
+                    'Labor Hrs': 'Labor Hrs'
+                }
+                display_ops = display_ops.rename(columns={k: v for k, v in col_rename.items() if k in display_ops.columns})
+
+                st.dataframe(
+                    display_ops,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=min(200, 35 * (len(display_ops) + 1))
+                )
+            else:
+                st.info("No operations found for this job.")
+
+            st.markdown("---")
+
+        # Material Shortage Section
+        if row_data.get('MaterialShort', False) and job != 'No Job':
+            st.markdown("#### ⚠️ Material Shortage")
+            shortage_details = get_material_shortage_details(job)
+            if shortage_details:
+                import pandas as pd
+                shortage_df = pd.DataFrame(shortage_details)
+                # Style the dataframe with red header
+                st.markdown("""
+                <style>
+                .shortage-table { background-color: #FFE4E4; }
+                </style>
+                """, unsafe_allow_html=True)
+                st.dataframe(
+                    shortage_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Part": st.column_config.TextColumn("Part #"),
+                        "Description": st.column_config.TextColumn("Description"),
+                        "Required": st.column_config.NumberColumn("Required", format="%.1f"),
+                        "Issued": st.column_config.NumberColumn("Issued", format="%.1f"),
+                        "Short": st.column_config.NumberColumn("Short", format="%.1f"),
+                    }
+                )
+            else:
+                st.warning("Material shortage flagged but no details available.")
+            st.markdown("---")
+
+        # MB Comments Section (Purchasing and Operations comments from spreadsheet)
+        purch_comments = row_data.get('PurchasingComments', '')
+        ops_comments = row_data.get('OperationsComments', '')
+        if purch_comments or ops_comments:
+            st.markdown("#### 📝 Spreadsheet Comments")
+            if purch_comments:
+                st.markdown(f"""
+                <div style="background-color: #E3F2FD; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #2196F3;">
+                    <strong>Purchasing Comments:</strong><br>
+                    {purch_comments}
+                </div>
+                """, unsafe_allow_html=True)
+            if ops_comments:
+                st.markdown(f"""
+                <div style="background-color: #FFF3E0; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #FF9800;">
+                    <strong>Operations Comments:</strong><br>
+                    {ops_comments}
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown("---")
+
+        # Notes Section
+        st.markdown("#### Notes")
+        notes = get_notes(job) if job != 'No Job' else []
+        if notes:
+            for note in notes:
+                note_id, job_num, text, created_at, created_by = note
+                st.markdown(f"""
+                <div style="background-color: #f0f2f6; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
+                    <strong>{created_by}</strong> - <em>{created_at}</em><br>
+                    {text}
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("No notes for this job.")
+
+        # Add note form
+        with st.expander("Add New Note"):
+            new_note = st.text_area("Note", key=f"detail_note_{job}_{order_lr}", height=80)
+            author = st.text_input("Your Name", value="User", key=f"detail_author_{job}_{order_lr}")
+            if st.button("Save Note", type="primary", key=f"save_note_{job}_{order_lr}"):
+                if new_note.strip() and job != 'No Job':
+                    try:
+                        add_note(job, new_note, author)
+                        st.success("Note added!")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {str(e)}")
+
+    job_detail_modal()
+
+
 def render_orders_table(df):
-    """Render the main orders data table"""
+    """Render the main orders data table with clickable rows"""
     if df.empty:
         st.warning("No orders match the current filters.")
         return
 
     st.markdown(f"### Orders ({len(df)} jobs)")
+    st.caption("Click on a row to view job details")
 
     # Format the dataframe for display
     display_df = df[[
-        'Job', 'Part', 'Description', 'Status',
-        'Selling Requested Qty', 'Qty Completed',
-        'Due Date_Display', 'Need By_Display',
-        'Name', 'LastLaborDate_Display'
+        'Job', 'OrderLineRel', 'Part', 'Description', 'Status',
+        'Order Qty', 'Rem Qty', 'MaterialShort', 'CanShip',
+        'Ship By_Display', 'Need By_Display',
+        'Name', 'LastLaborDate_Display', 'HasComments'
     ]].copy()
 
+    # Add notes indicator column
+    display_df['Notes'] = display_df['HasComments'].apply(lambda x: '📝' if x else '')
+
     display_df.columns = [
-        'Job', 'Part', 'Description', 'Status',
-        'Order Qty', 'Completed',
-        'Due Date', 'Need By',
-        'Customer', 'Last Labor'
+        'Job', 'Order-L-R', 'Part', 'Description', 'Status',
+        'Order Qty', 'Remaining', 'MaterialShort', 'CanShip',
+        'Ship By', 'Need By',
+        'Customer', 'Last Labor', 'HasComments', 'Notes'
     ]
 
-    # Add clickable indicators
-    display_df['📋'] = '📋'  # Notes indicator
-    display_df['📄'] = '📄'  # Drawing indicator
+    # Apply color coding based on status and material shortage/can ship
+    current_theme = st.session_state.theme
 
-    # Reorder columns
-    display_df = display_df[[
-        '📋', 'Job', 'Part', 'Description', 'Status',
-        'Order Qty', 'Completed', 'Due Date', 'Need By',
-        'Customer', 'Last Labor', '📄'
-    ]]
+    def color_job_columns(row):
+        """Apply text color to Job and Order-L-R based on status, and Remaining based on inventory"""
+        status = row['Status']
 
-    # Display the table
-    st.dataframe(
-        display_df,
+        # Colors for light theme
+        if current_theme == 'light':
+            status_text_colors = {
+                'unengineered': '#0066CC',  # Blue
+                'in_work': '#228B22',       # Forest green
+                'not_started': '#333333',   # Dark gray
+                'no_job': '#CC6600',        # Orange
+            }
+            red_color = '#CC0000'    # Dark red
+            green_color = '#228B22'  # Forest green
+            default_color = '#333333'
+        else:
+            # Colors for dark theme - lighter/brighter for visibility
+            status_text_colors = {
+                'unengineered': '#64B5F6',  # Light blue
+                'in_work': '#81C784',       # Light green
+                'not_started': '#BDBDBD',   # Light gray
+                'no_job': '#FFB74D',        # Light orange
+            }
+            red_color = '#EF5350'    # Light red
+            green_color = '#81C784'  # Light green
+            default_color = '#BDBDBD'
+
+        color = status_text_colors.get(status, default_color)
+        styles = [''] * len(row)
+        job_idx = list(row.index).index('Job')
+        olr_idx = list(row.index).index('Order-L-R')
+        rem_idx = list(row.index).index('Remaining')
+        styles[job_idx] = f'color: {color}; font-weight: bold'
+        styles[olr_idx] = f'color: {color}; font-weight: bold'
+        # Red text for Remaining if material shortage (takes precedence)
+        if row.get('MaterialShort', False):
+            styles[rem_idx] = f'color: {red_color}; font-weight: bold'
+        # Green text for Remaining if can ship from inventory
+        elif row.get('CanShip', False):
+            styles[rem_idx] = f'color: {green_color}; font-weight: bold'
+        return styles
+
+    # Style the dataframe
+    styled_df = display_df.style.apply(color_job_columns, axis=1)
+
+    # Display the table with row selection enabled
+    # Key includes theme so selection clears when theme changes
+    selection = st.dataframe(
+        styled_df,
         use_container_width=True,
         hide_index=True,
-        height=600,
+        height=550,
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"orders_table_{current_theme}",
         column_config={
             "Status": st.column_config.TextColumn("Status"),
-            "📋": st.column_config.TextColumn("Notes", width="small"),
-            "📄": st.column_config.TextColumn("Doc", width="small"),
+            "Order Qty": st.column_config.NumberColumn("Order Qty", format="%d"),
+            "Remaining": st.column_config.NumberColumn("Remaining", format="%d"),
+            "MaterialShort": None,  # Hide this column
+            "CanShip": None,  # Hide this column
+            "HasComments": None,  # Hide this column
+            "Notes": st.column_config.TextColumn("Notes", width="small"),
         }
     )
 
-    # Note: In a full implementation, we'd make rows clickable to show notes dialog
-    # For now, users can use the sidebar to add notes
+    # Handle row selection - show job detail modal
+    if selection and selection.selection and selection.selection.rows:
+        selected_idx = selection.selection.rows[0]
+        selected_row = df.iloc[selected_idx].to_dict()
+        show_job_detail_dialog(selected_row)
+
+
+def render_color_legend():
+    """Render a color legend at the bottom of the page"""
+    st.markdown("---")
+    st.markdown("#### Color Legend")
+
+    # Use theme-appropriate colors
+    if st.session_state.theme == 'light':
+        in_work_color = '#228B22'
+        uneng_color = '#0066CC'
+        not_started_color = '#333333'
+        no_job_color = '#CC6600'
+        shortage_color = '#CC0000'
+        can_ship_color = '#228B22'
+    else:
+        in_work_color = '#81C784'
+        uneng_color = '#64B5F6'
+        not_started_color = '#BDBDBD'
+        no_job_color = '#FFB74D'
+        shortage_color = '#EF5350'
+        can_ship_color = '#81C784'
+
+    legend_html = f"""
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 10px 0;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: {in_work_color}; font-weight: bold; font-size: 1.2em;">Job Text</span>
+            <span>= In Work</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: {uneng_color}; font-weight: bold; font-size: 1.2em;">Job Text</span>
+            <span>= Unengineered</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: {not_started_color}; font-weight: bold; font-size: 1.2em;">Job Text</span>
+            <span>= Not Started</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: {no_job_color}; font-weight: bold; font-size: 1.2em;">Job Text</span>
+            <span>= No Job</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: {shortage_color}; font-weight: bold; font-size: 1.2em;">Remaining</span>
+            <span>= Material Shortage</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: {can_ship_color}; font-weight: bold; font-size: 1.2em;">Remaining</span>
+            <span>= Can Ship from Inventory</span>
+        </div>
+    </div>
+    """
+    st.markdown(legend_html, unsafe_allow_html=True)
 
 
 def main():
@@ -335,6 +643,9 @@ def main():
 
     # Render orders table
     render_orders_table(filtered_df)
+
+    # Render color legend at bottom
+    render_color_legend()
 
     # Sidebar for additional functions
     with st.sidebar:

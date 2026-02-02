@@ -44,13 +44,24 @@ PAGE_ICON = "🏭"
 
 # Color coding settings (matching original Excel)
 COLORS = {
+    "no_job": "#FFA500",            # Orange - order lines without jobs
     "unengineered": "#ADD8E6",      # Light blue - unengineered jobs
     "in_work": "#90EE90",           # Green - jobs in work
+    "not_started": "#FFFFFF",       # White - not started
     "can_ship": "#90EE90",          # Green - inventory sufficient
     "cannot_ship": "#FFB6C1",       # Light red - inventory insufficient
     "esi_job": "#87CEEB",           # Sky blue - ESI jobs
     "late": "#FF6B6B",              # Red - past due
     "warning": "#FFD93D",           # Yellow - approaching due date
+
+    # Purchasing colors
+    "po_overdue": "#FF6B6B",        # Red - overdue POs
+    "po_warning": "#FFD93D",        # Yellow - due within 7 days
+    "po_ontime": "#90EE90",         # Green - on time
+
+    # Scheduling colors
+    "gantt_today": "#FF0000",       # Red - today line
+    "gantt_completed": "#4CAF50",   # Dark green - completed
 }
 
 # User roles
@@ -78,6 +89,7 @@ DEFAULT_THEME = "light"
 
 # Status display names
 STATUS_NAMES = {
+    "no_job": "No Job",
     "unengineered": "Unengineered",
     "in_work": "In-Work",
     "can_ship": "Can Ship",
