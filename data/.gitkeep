@@ -1,0 +1,3 @@
+# This directory holds data files
+# Production data files are NOT committed to git (see .gitignore)
+# Only sample_*.csv files are committed for testing
