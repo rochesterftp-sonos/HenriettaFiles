@@ -4,11 +4,16 @@ Settings Page - Configure data file paths and application settings
 import streamlit as st
 import json
 import os
+import platform
 from pathlib import Path
 import sys
 
 # Add parent directories to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
+
+# Detect operating system
+IS_MAC = platform.system() == "Darwin"
+IS_WINDOWS = platform.system() == "Windows"
 
 from config.settings import APP_TITLE, PAGE_ICON, DATA_PATHS, BASE_DIR
 
@@ -83,6 +88,80 @@ def find_matching_file(files, expected_filename):
     return None
 
 
+def open_folder_picker(title="Select Folder", initial_dir=None):
+    """Open a native folder picker dialog"""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        # Create a hidden root window
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)  # Bring dialog to front
+
+        # Set initial directory
+        if initial_dir and os.path.exists(initial_dir):
+            start_dir = initial_dir
+        elif IS_MAC:
+            start_dir = "/Volumes"
+        else:
+            start_dir = "C:\\"
+
+        # Open the folder picker
+        folder_path = filedialog.askdirectory(
+            title=title,
+            initialdir=start_dir
+        )
+
+        root.destroy()
+        return folder_path if folder_path else None
+    except Exception as e:
+        st.error(f"Could not open folder picker: {e}")
+        return None
+
+
+def open_file_picker(title="Select File", initial_dir=None, filetypes=None):
+    """Open a native file picker dialog"""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        # Create a hidden root window
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+
+        # Set initial directory
+        if initial_dir and os.path.exists(initial_dir):
+            start_dir = initial_dir
+        elif IS_MAC:
+            start_dir = "/Volumes"
+        else:
+            start_dir = "C:\\"
+
+        # Default filetypes
+        if filetypes is None:
+            filetypes = [
+                ("Data files", "*.csv *.xlsx *.xls *.xml"),
+                ("CSV files", "*.csv"),
+                ("Excel files", "*.xlsx *.xls"),
+                ("All files", "*.*")
+            ]
+
+        # Open the file picker
+        file_path = filedialog.askopenfilename(
+            title=title,
+            initialdir=start_dir,
+            filetypes=filetypes
+        )
+
+        root.destroy()
+        return file_path if file_path else None
+    except Exception as e:
+        st.error(f"Could not open file picker: {e}")
+        return None
+
+
 def main():
     st.title("⚙️ Settings")
     st.caption("Configure data file paths and application settings")
@@ -93,16 +172,28 @@ def main():
     # Data folder section
     st.markdown("---")
     st.markdown("### 📁 Data Folders")
-    st.caption("Set the folders where your data files are located. Common network paths are provided as defaults.")
 
-    # Common network paths for quick selection
-    COMMON_PATHS = {
-        "Epicor Data": r"\\192.168.168.230\EpicorData\Companies\FTTMFG\Processes\MMINOIA",
-        "WW Shop Load": r"\\192.168.168.88\Henfiles\Users Shared Folders\Leadership Team\WW Shop Load",
-        "Local Data": str(DATA_PATHS.get('shop_orders', '').parent),
-    }
+    # Show current OS
+    os_name = "macOS" if IS_MAC else "Windows" if IS_WINDOWS else "Linux"
+    st.caption(f"Detected OS: **{os_name}** - Use the Browse buttons to select folders from Finder/Explorer")
 
-    st.caption("**Quick Select:**")
+    # Common network paths - different for Mac vs Windows
+    if IS_MAC:
+        # Mac paths - network shares mounted in /Volumes
+        COMMON_PATHS = {
+            "Epicor Data": "/Volumes/EpicorData/Companies/FTTMFG/Processes/MMINOIA",
+            "WW Shop Load": "/Volumes/Henfiles/Users Shared Folders/Leadership Team/WW Shop Load",
+            "Local Data": str(DATA_PATHS.get('shop_orders', '').parent),
+        }
+    else:
+        # Windows UNC paths
+        COMMON_PATHS = {
+            "Epicor Data": r"\\192.168.168.230\EpicorData\Companies\FTTMFG\Processes\MMINOIA",
+            "WW Shop Load": r"\\192.168.168.88\Henfiles\Users Shared Folders\Leadership Team\WW Shop Load",
+            "Local Data": str(DATA_PATHS.get('shop_orders', '').parent),
+        }
+
+    st.caption("**Quick Select (preset paths):**")
     quick_cols = st.columns(len(COMMON_PATHS))
     for i, (name, path) in enumerate(COMMON_PATHS.items()):
         with quick_cols[i]:
@@ -116,20 +207,51 @@ def main():
     else:
         quick_selected = None
 
-    default_data_dir = quick_selected or user_settings.get('data_dir', COMMON_PATHS["Epicor Data"])
-    data_dir = st.text_input(
-        "Primary Data Folder Path",
-        value=default_data_dir,
-        help="Main folder containing your CSV/Excel data files (e.g., Epicor exports)"
-    )
+    # Primary data folder with browse button
+    st.markdown("**Primary Data Folder**")
+    col_input1, col_browse1 = st.columns([5, 1])
+    with col_input1:
+        default_data_dir = quick_selected or user_settings.get('data_dir', COMMON_PATHS["Epicor Data"])
+        data_dir = st.text_input(
+            "Primary Data Folder Path",
+            value=default_data_dir,
+            help="Main folder containing your CSV/Excel data files (e.g., Epicor exports)",
+            label_visibility="collapsed"
+        )
+    with col_browse1:
+        if st.button("📂 Browse", key="browse_primary", use_container_width=True):
+            selected = open_folder_picker("Select Primary Data Folder")
+            if selected:
+                st.session_state['selected_primary'] = selected
+                st.rerun()
 
-    # Secondary data folder for files in different locations
-    default_data_dir2 = user_settings.get('data_dir2', COMMON_PATHS["WW Shop Load"])
-    data_dir2 = st.text_input(
-        "Secondary Data Folder (WW Shop Load)",
-        value=default_data_dir2,
-        help="Additional folder for files like Shop Orders and Order Jobs"
-    )
+    # Check if folder was just selected
+    if 'selected_primary' in st.session_state:
+        data_dir = st.session_state['selected_primary']
+        del st.session_state['selected_primary']
+
+    # Secondary data folder with browse button
+    st.markdown("**Secondary Data Folder (WW Shop Load)**")
+    col_input2, col_browse2 = st.columns([5, 1])
+    with col_input2:
+        default_data_dir2 = user_settings.get('data_dir2', COMMON_PATHS["WW Shop Load"])
+        data_dir2 = st.text_input(
+            "Secondary Data Folder",
+            value=default_data_dir2,
+            help="Additional folder for files like Shop Orders and Order Jobs",
+            label_visibility="collapsed"
+        )
+    with col_browse2:
+        if st.button("📂 Browse", key="browse_secondary", use_container_width=True):
+            selected = open_folder_picker("Select Secondary Data Folder")
+            if selected:
+                st.session_state['selected_secondary'] = selected
+                st.rerun()
+
+    # Check if folder was just selected
+    if 'selected_secondary' in st.session_state:
+        data_dir2 = st.session_state['selected_secondary']
+        del st.session_state['selected_secondary']
 
     # Show folder status
     col1, col2 = st.columns(2)
@@ -232,7 +354,7 @@ def main():
 
     core_settings = {}
     for key, config in core_files.items():
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+        col1, col2, col3, col4, col5 = st.columns([2, 2, 3, 0.5, 0.5])
         with col1:
             st.markdown(f"**{config['label']}**")
             st.caption(config['description'])
@@ -245,8 +367,15 @@ def main():
                 label_visibility="collapsed"
             )
         with col3:
-            saved_path = user_settings.get(key, "")
-            default_path = get_best_path(key, config['filename'], saved_path)
+            # Check if file was just selected via picker
+            picker_key = f"picked_file_{key}"
+            if picker_key in st.session_state:
+                default_path = st.session_state[picker_key]
+                del st.session_state[picker_key]
+            else:
+                saved_path = user_settings.get(key, "")
+                default_path = get_best_path(key, config['filename'], saved_path)
+
             path = st.text_input(
                 f"Path for {config['label']}",
                 value=default_path,
@@ -256,6 +385,15 @@ def main():
             )
             core_settings[key] = path
         with col4:
+            if st.button("📄", key=f"pick_{key}", help="Browse for file"):
+                selected = open_file_picker(
+                    title=f"Select {config['label']}",
+                    initial_dir=data_dir if data_dir else None
+                )
+                if selected:
+                    st.session_state[f"picked_file_{key}"] = selected
+                    st.rerun()
+        with col5:
             status = check_file_exists(path)
             st.markdown(status)
 
@@ -289,7 +427,7 @@ def main():
 
     supporting_settings = {}
     for key, config in supporting_files.items():
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+        col1, col2, col3, col4, col5 = st.columns([2, 2, 3, 0.5, 0.5])
         with col1:
             st.markdown(f"**{config['label']}**")
             st.caption(config['description'])
@@ -302,8 +440,15 @@ def main():
                 label_visibility="collapsed"
             )
         with col3:
-            saved_path = user_settings.get(key, "")
-            default_path = get_best_path(key, config['filename'], saved_path)
+            # Check if file was just selected via picker
+            picker_key = f"picked_file_{key}"
+            if picker_key in st.session_state:
+                default_path = st.session_state[picker_key]
+                del st.session_state[picker_key]
+            else:
+                saved_path = user_settings.get(key, "")
+                default_path = get_best_path(key, config['filename'], saved_path)
+
             path = st.text_input(
                 f"Path for {config['label']}",
                 value=default_path,
@@ -313,6 +458,15 @@ def main():
             )
             supporting_settings[key] = path
         with col4:
+            if st.button("📄", key=f"pick_{key}", help="Browse for file"):
+                selected = open_file_picker(
+                    title=f"Select {config['label']}",
+                    initial_dir=data_dir if data_dir else None
+                )
+                if selected:
+                    st.session_state[f"picked_file_{key}"] = selected
+                    st.rerun()
+        with col5:
             status = check_file_exists(path)
             st.markdown(status)
 
@@ -321,19 +475,61 @@ def main():
     st.markdown("### 🖼️ Drawing Paths")
     st.caption("Network paths for part drawings")
 
-    col1, col2 = st.columns(2)
-    with col1:
+    # Default drawing paths based on OS
+    if IS_MAC:
+        default_esi_path = "/Volumes/Drawings/ESI Drawings/ESI Drawings"
+        default_non_esi_path = "/Volumes/Drawings/Customers"
+    else:
+        default_esi_path = r"\\wecofiles.weco.com\Drawings\ESI Drawings\ESI Drawings"
+        default_non_esi_path = r"\\200.200.200.230\Drawings\Customers"
+
+    # ESI Drawings path
+    st.markdown("**ESI Drawings Base Path**")
+    col1a, col1b = st.columns([5, 1])
+    with col1a:
+        # Check if folder was just selected via picker
+        if 'picked_esi_drawing' in st.session_state:
+            esi_default = st.session_state['picked_esi_drawing']
+            del st.session_state['picked_esi_drawing']
+        else:
+            esi_default = user_settings.get('esi_drawing_path', default_esi_path)
+
         esi_drawing_path = st.text_input(
-            "ESI Drawings Base Path",
-            value=user_settings.get('esi_drawing_path', '//wecofiles.weco.com/Drawings/ESI Drawings/ESI Drawings'),
-            help="Path to ESI drawings folder. Part number folder will be appended."
+            "ESI Drawings Path",
+            value=esi_default,
+            help="Path to ESI drawings folder. Part number folder will be appended.",
+            label_visibility="collapsed"
         )
-    with col2:
+    with col1b:
+        if st.button("📂 Browse", key="browse_esi_drawings"):
+            selected = open_folder_picker("Select ESI Drawings Folder")
+            if selected:
+                st.session_state['picked_esi_drawing'] = selected
+                st.rerun()
+
+    # Non-ESI Drawings path
+    st.markdown("**Non-ESI Drawings Base Path**")
+    col2a, col2b = st.columns([5, 1])
+    with col2a:
+        # Check if folder was just selected via picker
+        if 'picked_non_esi_drawing' in st.session_state:
+            non_esi_default = st.session_state['picked_non_esi_drawing']
+            del st.session_state['picked_non_esi_drawing']
+        else:
+            non_esi_default = user_settings.get('non_esi_drawing_path', default_non_esi_path)
+
         non_esi_drawing_path = st.text_input(
-            "Non-ESI Drawings Base Path",
-            value=user_settings.get('non_esi_drawing_path', '//200.200.200.230/Drawings/Customers'),
-            help="Path to customer drawings. Customer name and part number folders will be appended."
+            "Non-ESI Drawings Path",
+            value=non_esi_default,
+            help="Path to customer drawings. Customer name and part number folders will be appended.",
+            label_visibility="collapsed"
         )
+    with col2b:
+        if st.button("📂 Browse", key="browse_non_esi_drawings"):
+            selected = open_folder_picker("Select Non-ESI Drawings Folder")
+            if selected:
+                st.session_state['picked_non_esi_drawing'] = selected
+                st.rerun()
 
     # Save button
     st.markdown("---")
