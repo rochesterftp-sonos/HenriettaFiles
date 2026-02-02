@@ -6,7 +6,7 @@ from pathlib import Path
 
 # Base paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = BASE_DIR.parent / "Data"  # Points to actual data folder
 DATABASE_DIR = BASE_DIR / "database"
 
 # Data file paths - Update these to match your environment
@@ -65,3 +65,22 @@ ROLES = {
 # Date formats
 DATE_FORMAT = "%m/%d/%Y"
 DATETIME_FORMAT = "%m/%d/%Y %H:%M"
+
+# Refresh settings (in seconds)
+REFRESH_INTERVAL = 300  # 5 minutes
+
+# URL patterns for external links
+DRAWING_URL_PATTERN = "\\\\server\\drawings\\{part}.pdf"
+PO_URL_PATTERN = "{epicor}/po/{po}"
+
+# Default theme
+DEFAULT_THEME = "light"
+
+# Status display names
+STATUS_NAMES = {
+    "unengineered": "Unengineered",
+    "in_work": "In-Work",
+    "can_ship": "Can Ship",
+    "partial": "Partial",
+    "not_started": "Not Started",
+}
