@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from datetime import datetime
 import time
+import base64
+import os
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -16,8 +18,84 @@ from config.settings import (
     APP_TITLE, PAGE_ICON, COLORS, STATUS_NAMES,
     REFRESH_INTERVAL, DRAWING_URL_PATTERN, PO_URL_PATTERN
 )
-from app.utils.data_loader import load_all_data, get_job_operations, get_material_shortage_details
+from app.utils.data_loader import load_all_data, get_job_operations, get_material_shortage_details, load_user_settings
 from app.utils.database import init_database, add_note, get_notes, get_notes_count
+
+
+def get_drawing_folder(part_number, customer_name, is_esi):
+    """Get the folder path for part drawings based on ESI status"""
+    if not part_number:
+        return None
+
+    # Load user settings for custom paths
+    user_settings = load_user_settings()
+
+    if is_esi:
+        # ESI path
+        base_path = user_settings.get('esi_drawing_path', '//wecofiles.weco.com/Drawings/ESI Drawings/ESI Drawings')
+        folder = f"{base_path}/{part_number}"
+    else:
+        # Non-ESI path
+        base_path = user_settings.get('non_esi_drawing_path', '//200.200.200.230/Drawings/Customers')
+        customer = customer_name if customer_name else "Unknown"
+        folder = f"{base_path}/{customer}/{part_number}"
+
+    return folder
+
+
+def list_drawing_files(folder_path):
+    """List files in a drawing folder (PDFs and common image formats)"""
+    files = []
+    try:
+        if os.path.exists(folder_path) and os.path.isdir(folder_path):
+            for f in os.listdir(folder_path):
+                # Filter to common drawing file types
+                if f.lower().endswith(('.pdf', '.png', '.jpg', '.jpeg', '.tif', '.tiff', '.dwg', '.dxf')):
+                    files.append(f)
+            files.sort()
+    except Exception as e:
+        print(f"Error listing files: {e}")
+    return files
+
+
+def display_pdf_in_modal(pdf_path):
+    """Display a PDF file in the modal using base64 encoding"""
+    try:
+        if os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as f:
+                pdf_data = f.read()
+            base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
+            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
+            st.markdown(pdf_display, unsafe_allow_html=True)
+            return True
+        else:
+            return False
+    except Exception as e:
+        st.error(f"Error loading PDF: {str(e)}")
+        return False
+
+
+def display_image_in_modal(image_path):
+    """Display an image file in the modal"""
+    try:
+        if os.path.exists(image_path):
+            with open(image_path, "rb") as f:
+                image_data = f.read()
+            base64_img = base64.b64encode(image_data).decode('utf-8')
+            ext = os.path.splitext(image_path)[1].lower()
+            mime_type = {
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.tif': 'image/tiff',
+                '.tiff': 'image/tiff',
+            }.get(ext, 'image/png')
+            st.image(f"data:{mime_type};base64,{base64_img}", use_container_width=True)
+            return True
+        return False
+    except Exception as e:
+        st.error(f"Error loading image: {str(e)}")
+        return False
 
 # Page configuration
 st.set_page_config(
@@ -46,6 +124,10 @@ if 'filters' not in st.session_state:
     }
 if 'selected_job' not in st.session_state:
     st.session_state.selected_job = None
+if 'show_drawing' not in st.session_state:
+    st.session_state.show_drawing = None
+if 'selected_drawing_file' not in st.session_state:
+    st.session_state.selected_drawing_file = None
 
 
 def load_data():
@@ -310,7 +392,12 @@ def show_job_detail_dialog(row_data):
         with col1:
             st.markdown("#### Order Information")
             st.markdown(f"**Order-Line-Rel:** {order_lr}")
-            st.markdown(f"**Part:** {row_data.get('Part', 'N/A')}")
+            part_num = row_data.get('Part', 'N/A')
+            st.markdown(f"**Part:** {part_num}")
+            # View Drawing button
+            if part_num and part_num != 'N/A':
+                if st.button("📄 View Drawing", key=f"view_drawing_{order_lr}", use_container_width=True):
+                    st.session_state.show_drawing = part_num
             st.markdown(f"**Description:** {row_data.get('Description', 'N/A')}")
             st.markdown(f"**Customer:** {row_data.get('Name', 'N/A')}")
 
@@ -321,6 +408,59 @@ def show_job_detail_dialog(row_data):
             st.markdown(f"**Remaining:** {row_data.get('Rem Qty', 0)}")
             st.markdown(f"**Ship By:** {row_data.get('Ship By_Display', 'N/A')}")
             st.markdown(f"**Need By:** {row_data.get('Need By_Display', 'N/A')}")
+
+        # Drawing Display Section
+        if st.session_state.get('show_drawing'):
+            drawing_part = st.session_state.show_drawing
+            is_esi = row_data.get('IsESI', False)
+            customer = row_data.get('Name', 'Unknown')
+
+            st.markdown("---")
+            st.markdown(f"#### 📄 Drawings: {drawing_part}")
+
+            # Get folder path
+            folder_path = get_drawing_folder(drawing_part, customer, is_esi)
+
+            col_draw1, col_draw2 = st.columns([4, 1])
+            with col_draw2:
+                if st.button("✕ Close", key="close_drawing"):
+                    st.session_state.show_drawing = None
+                    st.session_state.selected_drawing_file = None
+                    st.rerun()
+
+            with col_draw1:
+                st.caption(f"Folder: {folder_path}")
+
+            # List files in folder
+            files = list_drawing_files(folder_path)
+
+            if files:
+                # File selector
+                selected_file = st.selectbox(
+                    "Select a drawing file:",
+                    options=files,
+                    key=f"drawing_file_select_{drawing_part}"
+                )
+
+                if selected_file:
+                    file_path = os.path.join(folder_path, selected_file)
+                    st.caption(f"File: {selected_file}")
+
+                    # Display based on file type
+                    if selected_file.lower().endswith('.pdf'):
+                        if not display_pdf_in_modal(file_path):
+                            st.warning("Could not display PDF in browser.")
+                            st.info(f"Full path: {file_path}")
+                    elif selected_file.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.tiff')):
+                        if not display_image_in_modal(file_path):
+                            st.warning("Could not display image.")
+                    else:
+                        st.info(f"File type not supported for preview: {selected_file}")
+                        st.code(file_path)
+            else:
+                st.warning(f"No drawing files found in folder.")
+                st.info(f"Checked path: {folder_path}")
+                st.caption("Supported formats: PDF, PNG, JPG, TIF")
 
         st.markdown("---")
 

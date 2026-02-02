@@ -14,6 +14,7 @@ DATABASE_DIR = BASE_DIR / "database"
 # For production, point to network shares
 DATA_PATHS = {
     # Core data files
+    "order_jobs": DATA_DIR / "Weco-West-MB_Order_Jobs.csv",
     "shop_orders": DATA_DIR / "Weco-West-MB_Shop_Orders.csv",
     "order_backlog": DATA_DIR / "Weco-West-ESC-OrderBacklog.csv",
     "order_backlog_v2": DATA_DIR / "Weco-West-ESC-OrderBacklogv2.csv",

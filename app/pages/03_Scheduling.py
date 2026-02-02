@@ -12,7 +12,8 @@ from pathlib import Path
 # Add parent directories to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from config.settings import APP_TITLE, PAGE_ICON, COLORS, STATUS_NAMES, DATA_PATHS
+from config.settings import APP_TITLE, PAGE_ICON, COLORS, STATUS_NAMES
+from app.utils.data_loader import get_data_path
 
 # Page configuration
 st.set_page_config(
@@ -37,7 +38,7 @@ def load_operations_data():
     Deduplicates by Job + Operation number, aggregating labor data.
     """
     try:
-        df = pd.read_csv(DATA_PATHS.get("shop_orders"))
+        df = pd.read_csv(get_data_path("shop_orders"))
 
         # Parse dates
         for col in ['Due Date', 'Ship By', 'Need By', 'Req. By']:

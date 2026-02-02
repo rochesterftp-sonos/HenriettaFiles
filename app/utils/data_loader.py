@@ -11,10 +11,47 @@ import numpy as np
 from datetime import datetime, timedelta
 from pathlib import Path
 import sys
+import json
+import os
 
 # Add parent directory to path to import config
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from config.settings import DATA_PATHS, DATE_FORMAT, DATA_DIR
+from config.settings import DATA_PATHS, DATE_FORMAT, DATA_DIR, BASE_DIR
+
+# User settings file
+USER_SETTINGS_FILE = BASE_DIR / "config" / "user_settings.json"
+
+
+def load_user_settings():
+    """Load user-configured settings from JSON file"""
+    if USER_SETTINGS_FILE.exists():
+        try:
+            with open(USER_SETTINGS_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def get_data_path(key, default=None):
+    """
+    Get the path for a data file, checking user settings first.
+    Falls back to DATA_PATHS from settings.py if not configured.
+    """
+    user_settings = load_user_settings()
+
+    # Check user settings first
+    if key in user_settings and user_settings[key]:
+        path = user_settings[key]
+        if os.path.exists(path):
+            return path
+
+    # Fall back to default DATA_PATHS
+    if key in DATA_PATHS:
+        return DATA_PATHS[key]
+
+    # Use provided default
+    return default
 
 
 def load_part_inventory():
@@ -25,7 +62,7 @@ def load_part_inventory():
     Takes the maximum Qty On Hand when a part has multiple rows.
     """
     try:
-        df = pd.read_csv(DATA_PATHS.get("part_cost"), on_bad_lines='skip')
+        df = pd.read_csv(get_data_path("part_cost"), on_bad_lines='skip')
         if 'Part' in df.columns and 'Qty On Hand' in df.columns:
             df['Qty On Hand'] = pd.to_numeric(df['Qty On Hand'], errors='coerce').fillna(0)
             # Take max Qty On Hand per part (some parts have multiple rows)
@@ -45,7 +82,7 @@ def load_mb_comments():
     """
     comments = {}
     try:
-        df = pd.read_excel(DATA_PATHS.get("comments_operations"), header=1)
+        df = pd.read_excel(get_data_path("comments_operations"), header=1)
 
         if 'Order L-R' not in df.columns:
             print("Warning: 'Order L-R' column not found in MB Comments")
@@ -86,7 +123,7 @@ def load_material_shortages():
     """
     try:
         import xml.etree.ElementTree as ET
-        xml_path = DATA_PATHS.get("material_not_issued")
+        xml_path = get_data_path("material_not_issued")
         if not xml_path or not xml_path.exists():
             return set()
 
@@ -122,7 +159,7 @@ def get_material_shortage_details(job_number):
     """
     try:
         import xml.etree.ElementTree as ET
-        xml_path = DATA_PATHS.get("material_not_issued")
+        xml_path = get_data_path("material_not_issued")
         if not xml_path or not xml_path.exists():
             return []
 
@@ -164,7 +201,7 @@ def get_job_operations(job_number):
     Returns a DataFrame with operation details.
     """
     try:
-        df = pd.read_csv(DATA_PATHS["shop_orders"])
+        df = pd.read_csv(get_data_path("shop_orders"))
 
         # Filter for the specific job
         job_ops = df[df['Job'] == job_number].copy()
@@ -199,7 +236,7 @@ def load_order_jobs():
     Returns a DataFrame with one row per order line (Order/Line/Rel combination).
     """
     try:
-        order_jobs_path = DATA_DIR / "Weco-West-MB_Order_Jobs.csv"
+        order_jobs_path = get_data_path("order_jobs", DATA_DIR / "Weco-West-MB_Order_Jobs.csv")
         df = pd.read_csv(order_jobs_path)
 
         # Rename columns to match our standard format
@@ -323,7 +360,7 @@ def load_shop_orders():
     """
     try:
         # Read the CSV file
-        df = pd.read_csv(DATA_PATHS["shop_orders"])
+        df = pd.read_csv(get_data_path("shop_orders"))
 
         # Convert boolean strings to actual booleans
         bool_columns = ['Engineered', 'Released']
@@ -390,7 +427,7 @@ def load_labor_history():
         # Labor history file has no header, so we need to specify column names
         # Based on the data structure observed
         df = pd.read_csv(
-            DATA_PATHS["labor_history"],
+            get_data_path("labor_history"),
             header=None,
             names=['Employee', 'Date', 'Type', 'Code', 'Hours', 'Job', 'Comment']
         )
@@ -426,7 +463,7 @@ def load_esi_customers():
 
     try:
         # Read the History MED sheet which has customer type info
-        df = pd.read_excel(DATA_PATHS["customer_names"], sheet_name="History MED", header=1)
+        df = pd.read_excel(get_data_path("customer_names"), sheet_name="History MED", header=1)
 
         # The "Business" column contains MED/MFG/Not FTT/etc.
         if 'Business' in df.columns and 'Customer' in df.columns:
@@ -715,7 +752,7 @@ def load_open_pos():
     Returns DataFrame with PO details and overdue status.
     """
     try:
-        df = pd.read_csv(DATA_PATHS.get("open_po"))
+        df = pd.read_csv(get_data_path("open_po"))
 
         # Parse Due Date
         df['Due Date'] = pd.to_datetime(df['Due Date'], errors='coerce')
@@ -913,7 +950,7 @@ def get_work_centers():
     Returns list of unique work center/operation names.
     """
     try:
-        df = pd.read_csv(DATA_PATHS.get("shop_orders"))
+        df = pd.read_csv(get_data_path("shop_orders"))
         if 'Operation Description' in df.columns:
             work_centers = df['Operation Description'].dropna().unique().tolist()
             return sorted(work_centers)
