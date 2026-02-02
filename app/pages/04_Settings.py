@@ -56,6 +56,33 @@ def check_file_exists(path):
     return "❌ Not found"
 
 
+def list_data_files(folder_path):
+    """List data files (CSV, Excel) in a folder"""
+    files = []
+    if folder_path and os.path.exists(folder_path):
+        try:
+            for f in os.listdir(folder_path):
+                if f.lower().endswith(('.csv', '.xlsx', '.xls', '.xml')):
+                    files.append(f)
+            files.sort()
+        except Exception:
+            pass
+    return files
+
+
+def find_matching_file(files, expected_filename):
+    """Find a file that matches the expected filename (case-insensitive)"""
+    expected_lower = expected_filename.lower()
+    for f in files:
+        if f.lower() == expected_lower:
+            return f
+    # Try partial match
+    for f in files:
+        if expected_lower in f.lower() or f.lower() in expected_lower:
+            return f
+    return None
+
+
 def main():
     st.title("⚙️ Settings")
     st.caption("Configure data file paths and application settings")
@@ -65,21 +92,84 @@ def main():
 
     # Data folder section
     st.markdown("---")
-    st.markdown("### 📁 Data Folder")
-    st.caption("Set the base folder where your data files are located, or configure each file individually below.")
+    st.markdown("### 📁 Data Folders")
+    st.caption("Set the folders where your data files are located. Common network paths are provided as defaults.")
 
-    default_data_dir = user_settings.get('data_dir', str(DATA_PATHS.get('shop_orders', '').parent))
+    # Common network paths for quick selection
+    COMMON_PATHS = {
+        "Epicor Data": r"\\192.168.168.230\EpicorData\Companies\FTTMFG\Processes\MMINOIA",
+        "WW Shop Load": r"\\192.168.168.88\Henfiles\Users Shared Folders\Leadership Team\WW Shop Load",
+        "Local Data": str(DATA_PATHS.get('shop_orders', '').parent),
+    }
+
+    st.caption("**Quick Select:**")
+    quick_cols = st.columns(len(COMMON_PATHS))
+    for i, (name, path) in enumerate(COMMON_PATHS.items()):
+        with quick_cols[i]:
+            if st.button(f"📁 {name}", key=f"quick_{name}", use_container_width=True):
+                st.session_state['quick_path'] = path
+
+    # Check if quick select was used
+    if 'quick_path' in st.session_state:
+        quick_selected = st.session_state['quick_path']
+        del st.session_state['quick_path']
+    else:
+        quick_selected = None
+
+    default_data_dir = quick_selected or user_settings.get('data_dir', COMMON_PATHS["Epicor Data"])
     data_dir = st.text_input(
-        "Data Folder Path",
+        "Primary Data Folder Path",
         value=default_data_dir,
-        help="Base folder containing your CSV/Excel data files"
+        help="Main folder containing your CSV/Excel data files (e.g., Epicor exports)"
     )
 
-    if data_dir:
-        if os.path.exists(data_dir):
-            st.success(f"✅ Folder exists: {data_dir}")
-        else:
-            st.warning(f"⚠️ Folder not found: {data_dir}")
+    # Secondary data folder for files in different locations
+    default_data_dir2 = user_settings.get('data_dir2', COMMON_PATHS["WW Shop Load"])
+    data_dir2 = st.text_input(
+        "Secondary Data Folder (WW Shop Load)",
+        value=default_data_dir2,
+        help="Additional folder for files like Shop Orders and Order Jobs"
+    )
+
+    # Show folder status
+    col1, col2 = st.columns(2)
+    with col1:
+        if data_dir:
+            if os.path.exists(data_dir):
+                st.success(f"✅ Primary folder exists")
+            else:
+                st.warning(f"⚠️ Primary folder not found")
+    with col2:
+        if data_dir2:
+            if os.path.exists(data_dir2):
+                st.success(f"✅ Secondary folder exists")
+            else:
+                st.warning(f"⚠️ Secondary folder not found")
+
+    # File browser expander
+    available_files = []
+    if data_dir and os.path.exists(data_dir):
+        available_files.extend([(f, data_dir) for f in list_data_files(data_dir)])
+    if data_dir2 and os.path.exists(data_dir2):
+        available_files.extend([(f, data_dir2) for f in list_data_files(data_dir2)])
+
+    if available_files:
+        with st.expander(f"📂 Browse Available Files ({len(available_files)} data files found)", expanded=False):
+            st.caption("Files found in your data folders:")
+            # Group by folder
+            if data_dir and os.path.exists(data_dir):
+                files_in_dir1 = list_data_files(data_dir)
+                if files_in_dir1:
+                    st.markdown(f"**Primary folder:** `{data_dir}`")
+                    for f in files_in_dir1:
+                        st.text(f"  • {f}")
+            if data_dir2 and os.path.exists(data_dir2):
+                files_in_dir2 = list_data_files(data_dir2)
+                if files_in_dir2:
+                    st.markdown(f"**Secondary folder:** `{data_dir2}`")
+                    for f in files_in_dir2:
+                        st.text(f"  • {f}")
+            st.info("💡 Copy the filename and paste into the path fields below, or the paths will auto-fill when you set the data folder.")
 
     # Core Data Files section
     st.markdown("---")
@@ -120,22 +210,52 @@ def main():
         },
     }
 
+    def get_best_path(key, filename, saved_path):
+        """Find the best path for a file, checking saved settings and both data folders"""
+        # First check if user already has a saved path that exists
+        if saved_path and os.path.exists(saved_path):
+            return saved_path
+        # Try primary data folder
+        if data_dir:
+            path1 = os.path.join(data_dir, filename)
+            if os.path.exists(path1):
+                return path1
+        # Try secondary data folder
+        if data_dir2:
+            path2 = os.path.join(data_dir2, filename)
+            if os.path.exists(path2):
+                return path2
+        # Return saved path or construct default
+        if saved_path:
+            return saved_path
+        return os.path.join(data_dir, filename) if data_dir else ""
+
     core_settings = {}
     for key, config in core_files.items():
-        col1, col2, col3 = st.columns([2, 3, 1])
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
         with col1:
             st.markdown(f"**{config['label']}**")
             st.caption(config['description'])
         with col2:
-            default_path = user_settings.get(key, os.path.join(data_dir, config['filename']) if data_dir else "")
+            st.text_input(
+                "Expected filename",
+                value=config['filename'],
+                key=f"expected_{key}",
+                disabled=True,
+                label_visibility="collapsed"
+            )
+        with col3:
+            saved_path = user_settings.get(key, "")
+            default_path = get_best_path(key, config['filename'], saved_path)
             path = st.text_input(
                 f"Path for {config['label']}",
                 value=default_path,
                 key=f"path_{key}",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                placeholder="Enter full file path..."
             )
             core_settings[key] = path
-        with col3:
+        with col4:
             status = check_file_exists(path)
             st.markdown(status)
 
@@ -169,20 +289,30 @@ def main():
 
     supporting_settings = {}
     for key, config in supporting_files.items():
-        col1, col2, col3 = st.columns([2, 3, 1])
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
         with col1:
             st.markdown(f"**{config['label']}**")
             st.caption(config['description'])
         with col2:
-            default_path = user_settings.get(key, os.path.join(data_dir, config['filename']) if data_dir else "")
+            st.text_input(
+                "Expected filename",
+                value=config['filename'],
+                key=f"expected_{key}",
+                disabled=True,
+                label_visibility="collapsed"
+            )
+        with col3:
+            saved_path = user_settings.get(key, "")
+            default_path = get_best_path(key, config['filename'], saved_path)
             path = st.text_input(
                 f"Path for {config['label']}",
                 value=default_path,
                 key=f"path_{key}",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                placeholder="Enter full file path..."
             )
             supporting_settings[key] = path
-        with col3:
+        with col4:
             status = check_file_exists(path)
             st.markdown(status)
 
@@ -213,6 +343,7 @@ def main():
         if st.button("💾 Save Settings", type="primary", use_container_width=True):
             all_settings = {
                 'data_dir': data_dir,
+                'data_dir2': data_dir2,
                 'esi_drawing_path': esi_drawing_path,
                 'non_esi_drawing_path': non_esi_drawing_path,
                 **core_settings,
