@@ -177,6 +177,55 @@ def create_alerts_list(df, metrics):
     return alerts
 
 
+def generate_summary_paragraph(metrics, alerts):
+    """Generate a natural language summary paragraph"""
+    parts = []
+
+    # Opening with total workload
+    parts.append(f"You have **{metrics['total_orders']} orders** in the system today.")
+
+    # Work status
+    if metrics['in_work'] > 0:
+        in_work_pct = round(metrics['in_work'] / metrics['total_orders'] * 100)
+        parts.append(f"Currently, **{metrics['in_work']} jobs ({in_work_pct}%)** are actively in work.")
+
+    # Critical issues first
+    critical_items = []
+    if metrics['past_due'] > 0:
+        critical_items.append(f"**{metrics['past_due']} past due**")
+    if metrics['material_shortage'] > 0:
+        critical_items.append(f"**{metrics['material_shortage']} with material shortages**")
+
+    if critical_items:
+        parts.append(f"⚠️ Immediate attention needed: {' and '.join(critical_items)}.")
+
+    # This week's outlook
+    if metrics['due_this_week'] > 0:
+        parts.append(f"Looking ahead, **{metrics['due_this_week']} orders** are due this week.")
+
+    # Positive notes
+    if metrics['can_ship'] > 0:
+        parts.append(f"Good news: **{metrics['can_ship']} orders** can ship from existing inventory.")
+
+    # Issues to address
+    issues = []
+    if metrics['no_job'] > 0:
+        issues.append(f"{metrics['no_job']} lines without jobs")
+    if metrics['unengineered'] > 0:
+        issues.append(f"{metrics['unengineered']} unengineered")
+
+    if issues:
+        parts.append(f"Items needing follow-up: {', '.join(issues)}.")
+
+    # Overall assessment
+    if metrics['past_due'] == 0 and metrics['material_shortage'] == 0:
+        parts.append("✅ Overall, things are looking good today!")
+    elif metrics['past_due'] > 5 or metrics['material_shortage'] > 5:
+        parts.append("🔴 This will be a challenging day - prioritize the critical items.")
+
+    return " ".join(parts)
+
+
 def get_past_due_details(df):
     """Get details of past due orders"""
     past_due = df[df['IsPastDue'] == True].copy()
@@ -369,6 +418,12 @@ def main():
     # Calculate metrics
     metrics = get_summary_metrics(df)
     alerts = create_alerts_list(df, metrics)
+
+    # Executive Summary Paragraph
+    st.markdown("---")
+    summary = generate_summary_paragraph(metrics, alerts)
+    st.markdown(f"### ☕ Morning Briefing")
+    st.markdown(summary)
 
     # Top metrics row
     st.markdown("---")
