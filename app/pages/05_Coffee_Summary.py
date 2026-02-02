@@ -311,12 +311,59 @@ def main():
     st.title("☕ Coffee Summary")
     st.caption(f"Daily Production Overview - {datetime.now().strftime('%A, %B %d, %Y')}")
 
-    # Load data
-    with st.spinner("Loading data..."):
-        df = load_all_data()
+    # Initialize session state for coffee summary data
+    if 'coffee_data' not in st.session_state:
+        st.session_state.coffee_data = None
+    if 'coffee_data_loaded_at' not in st.session_state:
+        st.session_state.coffee_data_loaded_at = None
+
+    # Check if we need to load data
+    need_load = False
+    today = datetime.now().date()
+
+    if st.session_state.coffee_data is None:
+        need_load = True
+    elif st.session_state.coffee_data_loaded_at:
+        # Check if data was loaded today
+        loaded_date = st.session_state.coffee_data_loaded_at.date()
+        if loaded_date != today:
+            need_load = True  # New day, reload
+
+    # Refresh controls
+    col_header1, col_header2, col_header3 = st.columns([2, 1, 1])
+
+    with col_header1:
+        if st.session_state.coffee_data_loaded_at:
+            loaded_time = st.session_state.coffee_data_loaded_at.strftime("%I:%M %p")
+            st.info(f"📊 Data loaded at **{loaded_time}** today")
+        else:
+            st.info("📊 Data not yet loaded")
+
+    with col_header2:
+        if st.button("🔄 Refresh Data", type="primary", use_container_width=True):
+            need_load = True
+            st.session_state.coffee_data = None
+
+    with col_header3:
+        auto_refresh = st.checkbox("Auto-refresh on new day", value=True)
+
+    # Load data if needed
+    if need_load or (auto_refresh and st.session_state.coffee_data is None):
+        with st.spinner("Loading fresh data..."):
+            df = load_all_data()
+            if df is not None and not df.empty:
+                st.session_state.coffee_data = df
+                st.session_state.coffee_data_loaded_at = datetime.now()
+                st.rerun()
+            else:
+                st.error("No data available. Please check data file configuration in Settings.")
+                return
+
+    # Use cached data
+    df = st.session_state.coffee_data
 
     if df is None or df.empty:
-        st.error("No data available. Please check data file configuration in Settings.")
+        st.error("No data available. Click 'Refresh Data' to load.")
         return
 
     # Calculate metrics
