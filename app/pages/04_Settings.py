@@ -472,15 +472,19 @@ def main():
 
     # Drawing Paths section
     st.markdown("---")
-    st.markdown("### 🖼️ Drawing Paths")
-    st.caption("Network paths for part drawings")
+    st.markdown("### 🖼️ Drawing / Image File Paths")
+    st.caption("Network paths for part drawings and image files (wecofiles server: 200.200.200.230)")
 
     # Default drawing paths based on OS
+    # wecofiles server IP: 200.200.200.230
     if IS_MAC:
+        # Mac paths - network shares mounted in /Volumes
+        # The share name may vary - common mount points
         default_esi_path = "/Volumes/Drawings/ESI Drawings/ESI Drawings"
         default_non_esi_path = "/Volumes/Drawings/Customers"
     else:
-        default_esi_path = r"\\wecofiles.weco.com\Drawings\ESI Drawings\ESI Drawings"
+        # Windows UNC paths using IP address
+        default_esi_path = r"\\200.200.200.230\Drawings\ESI Drawings\ESI Drawings"
         default_non_esi_path = r"\\200.200.200.230\Drawings\Customers"
 
     # ESI Drawings path

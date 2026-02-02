@@ -24,21 +24,34 @@ from app.utils.database import init_database, add_note, get_notes, get_notes_cou
 
 def get_drawing_folder(part_number, customer_name, is_esi):
     """Get the folder path for part drawings based on ESI status"""
+    import platform
+
     if not part_number:
         return None
 
     # Load user settings for custom paths
     user_settings = load_user_settings()
 
+    # Detect OS for default paths
+    is_mac = platform.system() == "Darwin"
+
     if is_esi:
-        # ESI path
-        base_path = user_settings.get('esi_drawing_path', '//wecofiles.weco.com/Drawings/ESI Drawings/ESI Drawings')
-        folder = f"{base_path}/{part_number}"
+        # ESI path - wecofiles server (200.200.200.230)
+        if is_mac:
+            default_path = "/Volumes/Drawings/ESI Drawings/ESI Drawings"
+        else:
+            default_path = r"\\200.200.200.230\Drawings\ESI Drawings\ESI Drawings"
+        base_path = user_settings.get('esi_drawing_path', default_path)
+        folder = os.path.join(base_path, part_number)
     else:
-        # Non-ESI path
-        base_path = user_settings.get('non_esi_drawing_path', '//200.200.200.230/Drawings/Customers')
+        # Non-ESI path - wecofiles server (200.200.200.230)
+        if is_mac:
+            default_path = "/Volumes/Drawings/Customers"
+        else:
+            default_path = r"\\200.200.200.230\Drawings\Customers"
+        base_path = user_settings.get('non_esi_drawing_path', default_path)
         customer = customer_name if customer_name else "Unknown"
-        folder = f"{base_path}/{customer}/{part_number}"
+        folder = os.path.join(base_path, customer, part_number)
 
     return folder
 
