@@ -753,8 +753,147 @@ def render_color_legend():
     st.markdown(legend_html, unsafe_allow_html=True)
 
 
+def apply_theme_css():
+    """Apply custom CSS based on selected theme"""
+    if st.session_state.theme == 'dark':
+        st.markdown("""
+        <style>
+        /* Dark theme overrides */
+        .stApp {
+            background-color: #1E1E1E;
+            color: #E0E0E0;
+        }
+
+        /* Main content area */
+        .main .block-container {
+            background-color: #1E1E1E;
+        }
+
+        /* Headers */
+        h1, h2, h3, h4, h5, h6 {
+            color: #E0E0E0 !important;
+        }
+
+        /* Regular text and labels */
+        p, span, label, .stMarkdown {
+            color: #E0E0E0 !important;
+        }
+
+        /* Sidebar */
+        [data-testid="stSidebar"] {
+            background-color: #252526;
+        }
+        [data-testid="stSidebar"] * {
+            color: #E0E0E0 !important;
+        }
+
+        /* Text inputs */
+        .stTextInput input, .stTextArea textarea {
+            background-color: #2D2D2D !important;
+            color: #E0E0E0 !important;
+            border-color: #404040 !important;
+        }
+
+        /* Select boxes */
+        .stSelectbox > div > div {
+            background-color: #2D2D2D !important;
+            color: #E0E0E0 !important;
+        }
+
+        /* Buttons */
+        .stButton > button {
+            background-color: #404040;
+            color: #E0E0E0;
+            border-color: #505050;
+        }
+        .stButton > button:hover {
+            background-color: #505050;
+            border-color: #606060;
+        }
+
+        /* Primary buttons */
+        .stButton > button[kind="primary"] {
+            background-color: #0066CC;
+            color: white;
+        }
+
+        /* Dataframe */
+        .stDataFrame {
+            background-color: #2D2D2D;
+        }
+        [data-testid="stDataFrame"] div {
+            background-color: #2D2D2D !important;
+        }
+        [data-testid="stDataFrame"] th {
+            background-color: #383838 !important;
+            color: #E0E0E0 !important;
+        }
+        [data-testid="stDataFrame"] td {
+            background-color: #2D2D2D !important;
+            color: #E0E0E0 !important;
+        }
+
+        /* Metrics */
+        [data-testid="stMetricValue"] {
+            color: #E0E0E0 !important;
+        }
+        [data-testid="stMetricLabel"] {
+            color: #B0B0B0 !important;
+        }
+
+        /* Expander */
+        .streamlit-expanderHeader {
+            background-color: #2D2D2D !important;
+            color: #E0E0E0 !important;
+        }
+        .streamlit-expanderContent {
+            background-color: #252526 !important;
+        }
+
+        /* Dialogs/Modals */
+        [data-testid="stModal"] > div {
+            background-color: #2D2D2D !important;
+        }
+
+        /* Captions */
+        .stCaption {
+            color: #A0A0A0 !important;
+        }
+
+        /* Success, Warning, Error, Info boxes */
+        .stSuccess, .stWarning, .stError, .stInfo {
+            color: #1E1E1E !important;
+        }
+
+        /* Radio buttons */
+        .stRadio label {
+            color: #E0E0E0 !important;
+        }
+
+        /* Dividers */
+        hr {
+            border-color: #404040 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+    else:
+        # Light theme - reset to defaults (minimal CSS)
+        st.markdown("""
+        <style>
+        /* Light theme - use Streamlit defaults */
+        .stApp {
+            background-color: #FFFFFF;
+            color: #262730;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+
 def main():
     """Main application function"""
+    # Apply theme CSS first
+    apply_theme_css()
+
     # Initialize database
     try:
         init_database()
@@ -808,13 +947,27 @@ def main():
 
         st.markdown("---")
 
-        # Theme toggle
+        # Theme toggle - using buttons for immediate feedback
         st.markdown("### Theme")
-        theme_option = st.radio("Color Scheme", ["Light", "Dark"], index=0 if st.session_state.theme == 'light' else 1)
-        new_theme = 'light' if theme_option == 'Light' else 'dark'
-        if new_theme != st.session_state.theme:
-            st.session_state.theme = new_theme
-            st.rerun()
+        col_light, col_dark = st.columns(2)
+        with col_light:
+            if st.button(
+                "☀️ Light",
+                type="primary" if st.session_state.theme == 'light' else "secondary",
+                use_container_width=True
+            ):
+                if st.session_state.theme != 'light':
+                    st.session_state.theme = 'light'
+                    st.rerun()
+        with col_dark:
+            if st.button(
+                "🌙 Dark",
+                type="primary" if st.session_state.theme == 'dark' else "secondary",
+                use_container_width=True
+            ):
+                if st.session_state.theme != 'dark':
+                    st.session_state.theme = 'dark'
+                    st.rerun()
 
         st.markdown("---")
 
