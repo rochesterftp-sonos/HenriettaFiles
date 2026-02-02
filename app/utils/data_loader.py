@@ -13,6 +13,8 @@ from pathlib import Path
 import sys
 import json
 import os
+import shutil
+import time
 
 # Add parent directory to path to import config
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -20,6 +22,211 @@ from config.settings import DATA_PATHS, DATE_FORMAT, DATA_DIR, BASE_DIR
 
 # User settings file
 USER_SETTINGS_FILE = BASE_DIR / "config" / "user_settings.json"
+
+# Local cache settings
+CACHE_DIR = BASE_DIR / "data" / "cache"
+CACHE_METADATA_FILE = CACHE_DIR / "cache_metadata.json"
+CACHE_CHECK_INTERVAL = 300  # 5 minutes in seconds
+
+# Files to cache (key must match DATA_PATHS keys)
+CACHED_FILES = [
+    "order_jobs",
+    "shop_orders",
+    "labor_history",
+    "part_cost",
+    "material_shortage",
+    "material_not_issued",
+    "customer_names",
+    "comments_operations",
+    "open_po",
+    "order_backlog",
+]
+
+
+def ensure_cache_dir():
+    """Create cache directory if it doesn't exist"""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def load_cache_metadata():
+    """Load cache metadata (timestamps, last check time)"""
+    if CACHE_METADATA_FILE.exists():
+        try:
+            with open(CACHE_METADATA_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"last_check": 0, "files": {}}
+
+
+def save_cache_metadata(metadata):
+    """Save cache metadata"""
+    ensure_cache_dir()
+    try:
+        with open(CACHE_METADATA_FILE, 'w') as f:
+            json.dump(metadata, f, indent=2)
+    except Exception as e:
+        print(f"Error saving cache metadata: {e}")
+
+
+def get_file_timestamp(filepath):
+    """Get file modification timestamp, returns 0 if file doesn't exist"""
+    try:
+        if filepath and os.path.exists(filepath):
+            return os.path.getmtime(filepath)
+    except Exception:
+        pass
+    return 0
+
+
+def get_cached_path(key):
+    """Get the local cache path for a file key"""
+    user_settings = load_user_settings()
+
+    # Get the original source path
+    source_path = None
+    if key in user_settings and user_settings[key]:
+        source_path = user_settings[key]
+    elif key in DATA_PATHS:
+        source_path = str(DATA_PATHS[key])
+
+    if not source_path:
+        return None
+
+    # Determine cache filename (preserve original extension)
+    filename = os.path.basename(source_path)
+    return CACHE_DIR / filename
+
+
+def should_check_for_updates():
+    """Check if enough time has passed to check for updates"""
+    metadata = load_cache_metadata()
+    last_check = metadata.get("last_check", 0)
+    return (time.time() - last_check) >= CACHE_CHECK_INTERVAL
+
+
+def update_cache_if_needed(force=False):
+    """
+    Check for file updates and copy new files to cache.
+    Only checks every CACHE_CHECK_INTERVAL seconds unless force=True.
+
+    Returns dict of {key: {"updated": bool, "source_time": timestamp, "cached": bool}}
+    """
+    ensure_cache_dir()
+    metadata = load_cache_metadata()
+
+    # Check if we should skip (not enough time passed)
+    if not force and not should_check_for_updates():
+        print(f"Skipping cache check (last check was {int(time.time() - metadata.get('last_check', 0))}s ago)")
+        return metadata.get("files", {})
+
+    print("Checking for data file updates...")
+    metadata["last_check"] = time.time()
+
+    user_settings = load_user_settings()
+    results = {}
+
+    for key in CACHED_FILES:
+        # Get source path
+        source_path = None
+        if key in user_settings and user_settings[key]:
+            source_path = user_settings[key]
+        elif key in DATA_PATHS:
+            source_path = str(DATA_PATHS[key])
+
+        if not source_path:
+            results[key] = {"updated": False, "source_time": 0, "cached": False, "error": "No path configured"}
+            continue
+
+        # Get timestamps
+        source_time = get_file_timestamp(source_path)
+        cached_path = get_cached_path(key)
+        cached_time = get_file_timestamp(cached_path) if cached_path else 0
+
+        # Get previous known source time
+        prev_source_time = metadata.get("files", {}).get(key, {}).get("source_time", 0)
+
+        result = {
+            "source_path": source_path,
+            "source_time": source_time,
+            "source_time_str": datetime.fromtimestamp(source_time).strftime("%m/%d/%Y %I:%M %p") if source_time > 0 else "Not found",
+            "cached": False,
+            "updated": False,
+            "error": None
+        }
+
+        if source_time == 0:
+            result["error"] = "Source file not found"
+            results[key] = result
+            continue
+
+        # Check if we need to update cache
+        needs_update = (source_time > cached_time) or (source_time != prev_source_time)
+
+        if needs_update:
+            try:
+                print(f"  Updating cache for {key}...")
+                shutil.copy2(source_path, cached_path)
+                result["updated"] = True
+                result["cached"] = True
+                print(f"  Copied {os.path.basename(source_path)} to cache")
+            except Exception as e:
+                result["error"] = str(e)
+                print(f"  Error caching {key}: {e}")
+        else:
+            result["cached"] = os.path.exists(cached_path) if cached_path else False
+
+        results[key] = result
+
+    # Save updated metadata
+    metadata["files"] = results
+    save_cache_metadata(metadata)
+
+    return results
+
+
+def get_data_path_with_cache(key, default=None):
+    """
+    Get the path for a data file, using cache if available.
+    Returns cached path if file is cached, otherwise returns source path.
+    """
+    cached_path = get_cached_path(key)
+
+    # If cached file exists and is newer, use it
+    if cached_path and os.path.exists(cached_path):
+        return str(cached_path)
+
+    # Fall back to original get_data_path logic
+    return get_data_path(key, default)
+
+
+def get_cache_status():
+    """
+    Get current cache status for all files.
+    Returns dict with file info for Settings page display.
+    """
+    metadata = load_cache_metadata()
+    files_info = metadata.get("files", {})
+
+    # Add current status
+    result = {}
+    for key in CACHED_FILES:
+        cached_path = get_cached_path(key)
+        info = files_info.get(key, {})
+
+        result[key] = {
+            "source_path": info.get("source_path", "Not configured"),
+            "source_time": info.get("source_time_str", "Unknown"),
+            "cached": os.path.exists(cached_path) if cached_path else False,
+            "cache_path": str(cached_path) if cached_path else None,
+            "last_updated": info.get("updated", False),
+            "error": info.get("error")
+        }
+
+    result["_last_check"] = metadata.get("last_check", 0)
+    result["_last_check_str"] = datetime.fromtimestamp(metadata.get("last_check", 0)).strftime("%m/%d/%Y %I:%M:%S %p") if metadata.get("last_check", 0) > 0 else "Never"
+
+    return result
 
 
 def load_user_settings():
@@ -33,14 +240,24 @@ def load_user_settings():
     return {}
 
 
-def get_data_path(key, default=None):
+def get_data_path(key, default=None, use_cache=True):
     """
-    Get the path for a data file, checking user settings first.
+    Get the path for a data file, checking cache first, then user settings.
     Falls back to DATA_PATHS from settings.py if not configured.
-    """
-    user_settings = load_user_settings()
 
-    # Check user settings first
+    Args:
+        key: The data file key (e.g., "shop_orders")
+        default: Default path if not found
+        use_cache: If True, return cached path if available
+    """
+    # Check cache first
+    if use_cache and key in CACHED_FILES:
+        cached_path = get_cached_path(key)
+        if cached_path and os.path.exists(cached_path):
+            return str(cached_path)
+
+    # Check user settings
+    user_settings = load_user_settings()
     if key in user_settings and user_settings[key]:
         path = user_settings[key]
         if os.path.exists(path):
@@ -52,6 +269,14 @@ def get_data_path(key, default=None):
 
     # Use provided default
     return default
+
+
+def get_source_path(key):
+    """
+    Get the original source path for a data file (not cached).
+    Used for checking file timestamps.
+    """
+    return get_data_path(key, use_cache=False)
 
 
 def load_part_inventory():
@@ -685,8 +910,14 @@ def load_all_data():
     Uses Order_Jobs as the primary source (matches WWDispatch spreadsheet)
     and merges in job details from Shop_Orders and HenEngJobs.
 
+    Checks for file updates and caches locally for faster loading.
+
     Returns a fully enriched DataFrame ready for display.
     """
+    # Check for updates and cache files (only checks every 5 minutes)
+    print("Checking data cache...")
+    cache_status = update_cache_if_needed()
+
     # Load order lines (primary source - all order lines including "No Job")
     print("Loading order jobs (primary source)...")
     orders_df = load_order_jobs()

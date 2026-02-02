@@ -16,6 +16,7 @@ IS_MAC = platform.system() == "Darwin"
 IS_WINDOWS = platform.system() == "Windows"
 
 from config.settings import APP_TITLE, PAGE_ICON, DATA_PATHS, BASE_DIR
+from app.utils.data_loader import get_cache_status, update_cache_if_needed
 
 # Page configuration
 st.set_page_config(
@@ -581,6 +582,77 @@ def main():
             st.info("Core files ready")
         else:
             st.warning("Some core files missing")
+
+    # Data Cache & File Timestamps Section
+    st.markdown("---")
+    st.markdown("### 🕐 Data Cache & File Timestamps")
+    st.caption("Files are cached locally for faster loading. Cache is checked for updates every 5 minutes.")
+
+    # Get cache status
+    try:
+        cache_status = get_cache_status()
+        last_check = cache_status.get("_last_check_str", "Never")
+        st.info(f"Last cache check: **{last_check}**")
+
+        # Force refresh button
+        col_refresh1, col_refresh2 = st.columns([1, 3])
+        with col_refresh1:
+            if st.button("🔄 Force Refresh Cache", use_container_width=True):
+                with st.spinner("Checking for updates..."):
+                    update_cache_if_needed(force=True)
+                    st.success("Cache refreshed!")
+                    st.rerun()
+
+        # Display file timestamps in a table
+        file_labels = {
+            "order_jobs": "Order Jobs",
+            "shop_orders": "Shop Orders",
+            "labor_history": "Labor History",
+            "part_cost": "Part Cost / Inventory",
+            "material_shortage": "Material Shortage",
+            "material_not_issued": "Material Not Issued (XML)",
+            "customer_names": "Customer Names",
+            "comments_operations": "MB Comments",
+            "open_po": "Open POs",
+            "order_backlog": "ESC Order Backlog",
+        }
+
+        st.markdown("**File Status:**")
+
+        # Create columns for the table header
+        hcol1, hcol2, hcol3, hcol4 = st.columns([2, 3, 1, 1])
+        with hcol1:
+            st.markdown("**File**")
+        with hcol2:
+            st.markdown("**Last Modified**")
+        with hcol3:
+            st.markdown("**Cached**")
+        with hcol4:
+            st.markdown("**Status**")
+
+        for key, label in file_labels.items():
+            info = cache_status.get(key, {})
+            source_time = info.get("source_time", "Unknown")
+            is_cached = info.get("cached", False)
+            error = info.get("error")
+
+            col1, col2, col3, col4 = st.columns([2, 3, 1, 1])
+            with col1:
+                st.text(label)
+            with col2:
+                st.text(source_time)
+            with col3:
+                st.text("✅" if is_cached else "❌")
+            with col4:
+                if error:
+                    st.text(f"⚠️ {error[:20]}")
+                elif is_cached:
+                    st.text("✅ OK")
+                else:
+                    st.text("⏳ Pending")
+
+    except Exception as e:
+        st.warning(f"Could not load cache status: {e}")
 
 
 if __name__ == "__main__":
