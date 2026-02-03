@@ -1,0 +1,85 @@
+{
+  "last_check": 1770122017.93825,
+  "files": {
+    "order_jobs": {
+      "source_path": "/Users/davidchambers/ClaudeCode/Weco/OperationsData/Data/Weco-West-MB_Order_Jobs.csv",
+      "source_time": 1770036906.0,
+      "source_time_str": "02/02/2026 07:55 AM",
+      "cached": true,
+      "updated": false,
+      "error": null
+    },
+    "shop_orders": {
+      "source_path": "/Users/davidchambers/ClaudeCode/Weco/OperationsData/Data/Weco-West-MB_Shop_Orders.csv",
+      "source_time": 1770036908.0,
+      "source_time_str": "02/02/2026 07:55 AM",
+      "cached": true,
+      "updated": false,
+      "error": null
+    },
+    "labor_history": {
+      "source_path": "/Users/davidchambers/ClaudeCode/Weco/OperationsData/Data/PK-LaborHistory.csv",
+      "source_time": 1770036916.0,
+      "source_time_str": "02/02/2026 07:55 AM",
+      "cached": true,
+      "updated": false,
+      "error": null
+    },
+    "part_cost": {
+      "source_path": "/Users/davidchambers/ClaudeCode/Weco/OperationsData/Data/WECO-West-PartCost.csv",
+      "source_time": 1770036908.0,
+      "source_time_str": "02/02/2026 07:55 AM",
+      "cached": true,
+      "updated": false,
+      "error": null
+    },
+    "material_shortage": {
+      "source_path": "/Users/davidchambers/ClaudeCode/Weco/OperationsData/Data/wecoWest-materialshortage.csv",
+      "source_time": 1770036906.0,
+      "source_time_str": "02/02/2026 07:55 AM",
+      "cached": true,
+      "updated": false,
+      "error": null
+    },
+    "material_not_issued": {
+      "source_path": "/Users/davidchambers/ClaudeCode/Weco/OperationsData/Data/Weco-West-MaterialNotIssued.xml",
+      "source_time": 1770036914.0,
+      "source_time_str": "02/02/2026 07:55 AM",
+      "cached": true,
+      "updated": false,
+      "error": null
+    },
+    "customer_names": {
+      "source_path": "/Users/davidchambers/ClaudeCode/Weco/OperationsData/Data/Customer Names.xlsx",
+      "source_time": 1768920974.0,
+      "source_time_str": "01/20/2026 09:56 AM",
+      "cached": true,
+      "updated": false,
+      "error": null
+    },
+    "comments_operations": {
+      "source_path": "/Users/davidchambers/ClaudeCode/Weco/OperationsData/Data/MB Comments.xlsx",
+      "source_time": 1769460798.0,
+      "source_time_str": "01/26/2026 03:53 PM",
+      "cached": true,
+      "updated": false,
+      "error": null
+    },
+    "open_po": {
+      "source_path": "/Users/davidchambers/ClaudeCode/Weco/OperationsData/Data/Weco-West-MB_Open_PO.csv",
+      "source_time": 1770036906.0,
+      "source_time_str": "02/02/2026 07:55 AM",
+      "cached": true,
+      "updated": false,
+      "error": null
+    },
+    "order_backlog": {
+      "source_path": "/Users/davidchambers/ClaudeCode/Weco/OperationsData/Data/Weco-West-ESC-OrderBacklog.csv",
+      "source_time": 1770036906.0,
+      "source_time_str": "02/02/2026 07:55 AM",
+      "cached": true,
+      "updated": false,
+      "error": null
+    }
+  }
+}

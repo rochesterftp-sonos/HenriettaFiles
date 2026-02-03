@@ -379,22 +379,22 @@ def main():
             need_load = True  # New day, reload
 
     # Refresh controls
-    col_header1, col_header2, col_header3 = st.columns([2, 1, 1])
+    col_header1, col_header2, col_header3 = st.columns([3, 1, 1])
 
     with col_header1:
         if st.session_state.coffee_data_loaded_at:
             loaded_time = st.session_state.coffee_data_loaded_at.strftime("%I:%M %p")
-            st.info(f"📊 Data loaded at **{loaded_time}** today")
+            st.info(f"Data loaded at **{loaded_time}** today")
         else:
-            st.info("📊 Data not yet loaded")
+            st.info("Data not yet loaded")
 
     with col_header2:
-        if st.button("🔄 Refresh Data", type="primary", use_container_width=True):
-            need_load = True
-            st.session_state.coffee_data = None
+        auto_refresh = st.checkbox("Auto-refresh on new day", value=True)
 
     with col_header3:
-        auto_refresh = st.checkbox("Auto-refresh on new day", value=True)
+        if st.button("Refresh Data", type="primary", use_container_width=True):
+            need_load = True
+            st.session_state.coffee_data = None
 
     # Load data if needed
     if need_load or (auto_refresh and st.session_state.coffee_data is None):
@@ -422,14 +422,15 @@ def main():
     # Executive Summary Paragraph
     st.markdown("---")
     summary = generate_summary_paragraph(metrics, alerts)
-    st.markdown(f"### ☕ Morning Briefing")
+    st.markdown("### Morning Briefing")
     st.markdown(summary)
 
     # Top metrics row
     st.markdown("---")
-    st.markdown("### 📊 Today's Numbers")
+    st.markdown("### Today's Numbers")
 
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    # Row 1: Most critical metrics
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         st.metric("Total Orders", metrics['total_orders'])
@@ -439,6 +440,13 @@ def main():
     with col3:
         delta_color = "inverse" if metrics['past_due'] > 0 else "normal"
         st.metric("Past Due", metrics['past_due'], delta_color=delta_color)
+
+    # Small gap between rows
+    st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+
+    # Row 2: Secondary metrics
+    col4, col5, col6 = st.columns(3)
+
     with col4:
         st.metric("Due This Week", metrics['due_this_week'])
     with col5:
@@ -448,7 +456,7 @@ def main():
 
     # Alerts section
     st.markdown("---")
-    st.markdown("### ⚠️ Alerts & Action Items")
+    st.markdown("### Alerts & Action Items")
 
     if not alerts:
         st.success("✅ No critical alerts today!")
@@ -463,7 +471,7 @@ def main():
 
     # Charts row
     st.markdown("---")
-    st.markdown("### 📈 Visual Overview")
+    st.markdown("### Visual Overview")
 
     col_chart1, col_chart2 = st.columns(2)
 
@@ -480,7 +488,7 @@ def main():
     col_detail1, col_detail2 = st.columns(2)
 
     with col_detail1:
-        st.markdown("### 🔴 Past Due Orders")
+        st.markdown("### Past Due Orders")
         past_due = get_past_due_details(df)
         if past_due is not None and not past_due.empty:
             st.dataframe(past_due, use_container_width=True, hide_index=True)
@@ -488,7 +496,7 @@ def main():
             st.success("No past due orders!")
 
     with col_detail2:
-        st.markdown("### 🟡 Material Shortages")
+        st.markdown("### Material Shortages")
         shortages = get_material_shortage_jobs(df)
         if shortages is not None and not shortages.empty:
             st.dataframe(shortages, use_container_width=True, hide_index=True)
@@ -497,7 +505,7 @@ def main():
 
     # ESI vs Non-ESI breakdown
     st.markdown("---")
-    st.markdown("### 🏥 ESI vs Standard Orders")
+    st.markdown("### ESI vs Standard Orders")
 
     col_esi1, col_esi2, col_esi3 = st.columns(3)
 
@@ -514,7 +522,7 @@ def main():
 
     # Email section
     st.markdown("---")
-    st.markdown("### 📧 Email Summary to Supervisor")
+    st.markdown("### Email Summary to Supervisor")
 
     with st.expander("Configure & Send Email", expanded=False):
         st.caption("Send this summary to your supervisor")

@@ -190,32 +190,29 @@ def apply_filters(df):
 
 def render_header():
     """Render the application header"""
-    col1, col2, col3 = st.columns([2, 2, 1])
+    col1, col2 = st.columns([4, 1])
 
     with col1:
         st.title(f"{PAGE_ICON} {APP_TITLE}")
-
-    with col2:
         if st.session_state.last_refresh:
             refresh_time = st.session_state.last_refresh.strftime("%I:%M %p")
             st.caption(f"Last updated: {refresh_time}")
 
-    with col3:
-        if st.button("🔄 Refresh", use_container_width=True):
+    with col2:
+        if st.button("Refresh", type="primary", use_container_width=True):
             load_data()
             st.rerun()
 
 
 def render_filter_bar(df):
     """Render the quick filter bar"""
-    st.markdown("### Quick Filters")
-
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    # Row 1: Toggle buttons + Clear All
+    col1, col2, col3, col4 = st.columns([2, 2, 4, 1])
 
     with col1:
         uneng_count = len(df[df['Status'] == 'unengineered'])
         if st.button(
-            f"📘 Unengineered ({uneng_count})",
+            f"Unengineered ({uneng_count})",
             type="primary" if st.session_state.filters['unengineered'] else "secondary",
             use_container_width=True
         ):
@@ -225,14 +222,32 @@ def render_filter_bar(df):
     with col2:
         inwork_count = len(df[df['Status'] == 'in_work'])
         if st.button(
-            f"🟢 In-Work ({inwork_count})",
+            f"In-Work ({inwork_count})",
             type="primary" if st.session_state.filters['in_work'] else "secondary",
             use_container_width=True
         ):
             st.session_state.filters['in_work'] = not st.session_state.filters['in_work']
             st.rerun()
 
-    with col3:
+    # col3 is spacer
+
+    with col4:
+        if st.button("Clear All", use_container_width=True):
+            st.session_state.filters = {
+                'unengineered': False,
+                'in_work': False,
+                'can_ship': False,
+                'esi': 'All',
+                'customer': 'All',
+                'date_range': None,
+                'remaining': 'All'
+            }
+            st.rerun()
+
+    # Row 2: Dropdowns
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 3])
+
+    with col1:
         # Remaining column filter (by color)
         shortage_count = len(df[df['MaterialShort'] == True])
         canship_count = len(df[df['CanShip'] == True])
@@ -265,7 +280,7 @@ def render_filter_bar(df):
             st.session_state.filters['remaining'] = new_remaining
             st.rerun()
 
-    with col4:
+    with col2:
         esi_options = ['All', 'ESI Only', 'Non-ESI Only']
         current_esi = st.session_state.filters['esi']
         esi_selection = st.selectbox(
@@ -278,7 +293,7 @@ def render_filter_bar(df):
             st.session_state.filters['esi'] = esi_selection
             st.rerun()
 
-    with col5:
+    with col3:
         customers = ['All'] + sorted(df['Name'].dropna().unique().tolist())
         current_customer = st.session_state.filters['customer']
         if current_customer not in customers:
@@ -291,19 +306,6 @@ def render_filter_bar(df):
         )
         if customer_selection != current_customer:
             st.session_state.filters['customer'] = customer_selection
-            st.rerun()
-
-    with col6:
-        if st.button("🗑️ Clear All", use_container_width=True):
-            st.session_state.filters = {
-                'unengineered': False,
-                'in_work': False,
-                'can_ship': False,
-                'esi': 'All',
-                'customer': 'All',
-                'date_range': None,
-                'remaining': 'All'
-            }
             st.rerun()
 
     st.markdown("---")
@@ -689,10 +691,7 @@ def render_orders_table(df):
 
 
 def render_color_legend():
-    """Render a color legend at the bottom of the page"""
-    st.markdown("---")
-    st.markdown("#### Color Legend")
-
+    """Render a compact color legend above the table"""
     # Light mode colors
     in_work_color = '#228B22'
     uneng_color = '#0066CC'
@@ -702,31 +701,13 @@ def render_color_legend():
     can_ship_color = '#228B22'
 
     legend_html = f"""
-    <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 10px 0;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: {in_work_color}; font-weight: bold; font-size: 1.2em;">Job Text</span>
-            <span>= In Work</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: {uneng_color}; font-weight: bold; font-size: 1.2em;">Job Text</span>
-            <span>= Unengineered</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: {not_started_color}; font-weight: bold; font-size: 1.2em;">Job Text</span>
-            <span>= Not Started</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: {no_job_color}; font-weight: bold; font-size: 1.2em;">Job Text</span>
-            <span>= No Job</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: {shortage_color}; font-weight: bold; font-size: 1.2em;">Remaining</span>
-            <span>= Material Shortage</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: {can_ship_color}; font-weight: bold; font-size: 1.2em;">Remaining</span>
-            <span>= Can Ship from Inventory</span>
-        </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 4px 0; font-size: 0.85em; color: #666;">
+        <span><span style="color: {in_work_color}; font-weight: 600;">In Work</span></span>
+        <span><span style="color: {uneng_color}; font-weight: 600;">Unengineered</span></span>
+        <span><span style="color: {not_started_color}; font-weight: 600;">Not Started</span></span>
+        <span><span style="color: {no_job_color}; font-weight: 600;">No Job</span></span>
+        <span style="margin-left: 8px; border-left: 1px solid #ccc; padding-left: 12px;"><span style="color: {shortage_color}; font-weight: 600;">Remaining</span> = Shortage</span>
+        <span><span style="color: {can_ship_color}; font-weight: 600;">Remaining</span> = Can Ship</span>
     </div>
     """
     st.markdown(legend_html, unsafe_allow_html=True)
@@ -762,11 +743,11 @@ def main():
     # Apply filters
     filtered_df = apply_filters(df)
 
+    # Render color legend above table
+    render_color_legend()
+
     # Render orders table
     render_orders_table(filtered_df)
-
-    # Render color legend at bottom
-    render_color_legend()
 
     # Sidebar for additional functions
     with st.sidebar:
