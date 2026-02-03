@@ -349,7 +349,7 @@ def load_material_shortages():
     try:
         import xml.etree.ElementTree as ET
         xml_path = get_data_path("material_not_issued")
-        if not xml_path or not xml_path.exists():
+        if not xml_path or not os.path.exists(xml_path):
             return set()
 
         tree = ET.parse(xml_path)
@@ -385,7 +385,7 @@ def get_material_shortage_details(job_number):
     try:
         import xml.etree.ElementTree as ET
         xml_path = get_data_path("material_not_issued")
-        if not xml_path or not xml_path.exists():
+        if not xml_path or not os.path.exists(xml_path):
             return []
 
         tree = ET.parse(xml_path)
@@ -726,13 +726,26 @@ def calculate_status(row):
     if pd.isna(eng) or eng == False or eng == 'No Job':
         return 'unengineered'
 
-    # Check if in work - Labor Type = 'P' means production labor recorded
+    # Check if in work - multiple indicators
     labor_type = row.get('Labor Type', '')
     qty_completed = row.get('Qty Completed', 0)
+    total_labor_hours = row.get('TotalLaborHours', 0)
+    last_labor_date = row.get('LastLaborDate')
 
-    if labor_type == 'P':
+    # Labor Type P=Production, I=Indirect, S=Setup all indicate work
+    if labor_type in ['P', 'I', 'S']:
         return 'in_work'
+
+    # If any quantity completed, it's in work
     if pd.notna(qty_completed) and qty_completed > 0:
+        return 'in_work'
+
+    # If there's labor history recorded for this job, it's in work
+    if pd.notna(total_labor_hours) and total_labor_hours > 0:
+        return 'in_work'
+
+    # If there's a last labor date, work has started
+    if pd.notna(last_labor_date):
         return 'in_work'
 
     return 'not_started'
