@@ -123,8 +123,6 @@ if 'data' not in st.session_state:
     st.session_state.data = None
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = None
-if 'theme' not in st.session_state:
-    st.session_state.theme = 'light'
 if 'filters' not in st.session_state:
     st.session_state.filters = {
         'unengineered': False,
@@ -150,20 +148,9 @@ def load_data():
         st.session_state.last_refresh = datetime.now()
 
 
-def get_status_color(status, theme='light'):
+def get_status_color(status):
     """Get color for status badge"""
-    if theme == 'light':
-        return COLORS.get(status, '#D3D3D3')
-    else:
-        # For dark theme, use darker colors
-        dark_colors = {
-            'unengineered': '#1E5F8C',
-            'in_work': '#2D5F2E',
-            'can_ship': '#2D5F2E',
-            'partial': '#8B7500',
-            'not_started': '#4A4A4A',
-        }
-        return dark_colors.get(status, '#4A4A4A')
+    return COLORS.get(status, '#D3D3D3')
 
 
 def apply_filters(df):
@@ -324,7 +311,7 @@ def render_filter_bar(df):
 
 def render_status_badge(status):
     """Render a colored status badge"""
-    color = get_status_color(status, st.session_state.theme)
+    color = get_status_color(status)
     status_name = STATUS_NAMES.get(status, status.title())
     return f'<span style="background-color: {color}; padding: 4px 12px; border-radius: 12px; color: #000; font-weight: 500; font-size: 0.85em;">{status_name}</span>'
 
@@ -389,7 +376,7 @@ def show_job_detail_dialog(row_data):
     def job_detail_modal():
         # Header with status
         status = row_data.get('Status', 'unknown')
-        status_color = get_status_color(status, st.session_state.theme)
+        status_color = get_status_color(status)
         status_name = STATUS_NAMES.get(status, status.title())
 
         st.markdown(f"""
@@ -639,44 +626,23 @@ def render_orders_table(df):
     ]
 
     # Apply color coding based on status and material shortage/can ship
-    current_theme = st.session_state.theme
-
     def color_job_columns(row):
         """Apply text color to Job and Order-L-R based on status, and Remaining based on inventory"""
         status = row['Status']
 
-        # Colors for light theme
-        if current_theme == 'light':
-            status_text_colors = {
-                'unengineered': '#0066CC',  # Blue
-                'in_work': '#228B22',       # Forest green
-                'not_started': '#333333',   # Dark gray
-                'no_job': '#CC6600',        # Orange
-            }
-            red_color = '#CC0000'    # Dark red
-            green_color = '#228B22'  # Forest green
-            default_color = '#333333'
-            base_text_color = '#333333'
-        else:
-            # Colors for dark theme - lighter/brighter for visibility
-            status_text_colors = {
-                'unengineered': '#64B5F6',  # Light blue
-                'in_work': '#81C784',       # Light green
-                'not_started': '#E0E0E0',   # Light gray
-                'no_job': '#FFB74D',        # Light orange
-            }
-            red_color = '#EF5350'    # Light red
-            green_color = '#81C784'  # Light green
-            default_color = '#E0E0E0'
-            base_text_color = '#E0E0E0'  # Light text for dark background
+        # Light mode colors
+        status_text_colors = {
+            'unengineered': '#0066CC',  # Blue
+            'in_work': '#228B22',       # Forest green
+            'not_started': '#333333',   # Dark gray
+            'no_job': '#CC6600',        # Orange
+        }
+        red_color = '#CC0000'    # Dark red
+        green_color = '#228B22'  # Forest green
+        default_color = '#333333'
 
         color = status_text_colors.get(status, default_color)
-
-        # In dark mode, apply base text color to ALL cells for visibility
-        if current_theme == 'dark':
-            styles = [f'color: {base_text_color}'] * len(row)
-        else:
-            styles = [''] * len(row)
+        styles = [''] * len(row)
 
         job_idx = list(row.index).index('Job')
         olr_idx = list(row.index).index('Order-L-R')
@@ -692,13 +658,7 @@ def render_orders_table(df):
         return styles
 
     # Style the dataframe
-    if current_theme == 'dark':
-        # For dark mode, set background and default text color for entire dataframe
-        styled_df = display_df.style\
-            .set_properties(**{'background-color': '#2D2D2D', 'color': '#E0E0E0'})\
-            .apply(color_job_columns, axis=1)
-    else:
-        styled_df = display_df.style.apply(color_job_columns, axis=1)
+    styled_df = display_df.style.apply(color_job_columns, axis=1)
 
     # Display the table with row selection enabled
     # Key includes theme so selection clears when theme changes
@@ -709,7 +669,7 @@ def render_orders_table(df):
         height=550,
         on_select="rerun",
         selection_mode="single-row",
-        key=f"orders_table_{current_theme}",
+        key="orders_table",
         column_config={
             "Status": st.column_config.TextColumn("Status"),
             "Order Qty": st.column_config.NumberColumn("Order Qty", format="%d"),
@@ -733,21 +693,13 @@ def render_color_legend():
     st.markdown("---")
     st.markdown("#### Color Legend")
 
-    # Use theme-appropriate colors
-    if st.session_state.theme == 'light':
-        in_work_color = '#228B22'
-        uneng_color = '#0066CC'
-        not_started_color = '#333333'
-        no_job_color = '#CC6600'
-        shortage_color = '#CC0000'
-        can_ship_color = '#228B22'
-    else:
-        in_work_color = '#81C784'
-        uneng_color = '#64B5F6'
-        not_started_color = '#BDBDBD'
-        no_job_color = '#FFB74D'
-        shortage_color = '#EF5350'
-        can_ship_color = '#81C784'
+    # Light mode colors
+    in_work_color = '#228B22'
+    uneng_color = '#0066CC'
+    not_started_color = '#333333'
+    no_job_color = '#CC6600'
+    shortage_color = '#CC0000'
+    can_ship_color = '#228B22'
 
     legend_html = f"""
     <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 10px 0;">
@@ -780,183 +732,10 @@ def render_color_legend():
     st.markdown(legend_html, unsafe_allow_html=True)
 
 
-def apply_theme_css():
-    """Apply custom CSS based on selected theme"""
-    if st.session_state.theme == 'dark':
-        st.markdown("""
-        <style>
-        /* Dark theme overrides */
-        .stApp {
-            background-color: #1E1E1E;
-            color: #E0E0E0;
-        }
-
-        /* Main content area */
-        .main .block-container {
-            background-color: #1E1E1E;
-        }
-
-        /* Headers */
-        h1, h2, h3, h4, h5, h6 {
-            color: #E0E0E0 !important;
-        }
-
-        /* Regular text and labels */
-        p, span, label, .stMarkdown {
-            color: #E0E0E0 !important;
-        }
-
-        /* Sidebar */
-        [data-testid="stSidebar"] {
-            background-color: #252526;
-        }
-        [data-testid="stSidebar"] * {
-            color: #E0E0E0 !important;
-        }
-
-        /* Text inputs */
-        .stTextInput input, .stTextArea textarea {
-            background-color: #2D2D2D !important;
-            color: #E0E0E0 !important;
-            border-color: #404040 !important;
-        }
-
-        /* Select boxes */
-        .stSelectbox > div > div {
-            background-color: #2D2D2D !important;
-            color: #E0E0E0 !important;
-        }
-
-        /* Buttons */
-        .stButton > button {
-            background-color: #404040;
-            color: #E0E0E0;
-            border-color: #505050;
-        }
-        .stButton > button:hover {
-            background-color: #505050;
-            border-color: #606060;
-        }
-
-        /* Primary buttons */
-        .stButton > button[kind="primary"] {
-            background-color: #0066CC;
-            color: white;
-        }
-
-        /* Dataframe - comprehensive styling */
-        .stDataFrame, [data-testid="stDataFrame"] {
-            background-color: #2D2D2D !important;
-        }
-
-        /* Target the actual table elements inside the dataframe */
-        [data-testid="stDataFrame"] table {
-            background-color: #2D2D2D !important;
-        }
-        [data-testid="stDataFrame"] thead tr th {
-            background-color: #383838 !important;
-            color: #E0E0E0 !important;
-        }
-        [data-testid="stDataFrame"] tbody tr td {
-            background-color: #2D2D2D !important;
-            color: #E0E0E0 !important;
-        }
-        [data-testid="stDataFrame"] tbody tr:hover td {
-            background-color: #404040 !important;
-        }
-
-        /* Glide data grid (used by newer Streamlit versions) */
-        [data-testid="stDataFrame"] .dvn-scroller {
-            background-color: #2D2D2D !important;
-        }
-        [data-testid="stDataFrame"] .dvn-underlay {
-            background-color: #2D2D2D !important;
-        }
-        [data-testid="stDataFrame"] [class*="cell"] {
-            background-color: #2D2D2D !important;
-            color: #E0E0E0 !important;
-        }
-        [data-testid="stDataFrame"] [class*="header"] {
-            background-color: #383838 !important;
-            color: #E0E0E0 !important;
-        }
-
-        /* Data editor cells */
-        .gdg-cell {
-            background-color: #2D2D2D !important;
-            color: #E0E0E0 !important;
-        }
-        .gdg-header-cell {
-            background-color: #383838 !important;
-            color: #E0E0E0 !important;
-        }
-
-        /* Canvas-based grid text */
-        [data-testid="stDataFrame"] canvas {
-            filter: none !important;
-        }
-
-        /* Metrics */
-        [data-testid="stMetricValue"] {
-            color: #E0E0E0 !important;
-        }
-        [data-testid="stMetricLabel"] {
-            color: #B0B0B0 !important;
-        }
-
-        /* Expander */
-        .streamlit-expanderHeader {
-            background-color: #2D2D2D !important;
-            color: #E0E0E0 !important;
-        }
-        .streamlit-expanderContent {
-            background-color: #252526 !important;
-        }
-
-        /* Dialogs/Modals */
-        [data-testid="stModal"] > div {
-            background-color: #2D2D2D !important;
-        }
-
-        /* Captions */
-        .stCaption {
-            color: #A0A0A0 !important;
-        }
-
-        /* Success, Warning, Error, Info boxes */
-        .stSuccess, .stWarning, .stError, .stInfo {
-            color: #1E1E1E !important;
-        }
-
-        /* Radio buttons */
-        .stRadio label {
-            color: #E0E0E0 !important;
-        }
-
-        /* Dividers */
-        hr {
-            border-color: #404040 !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-    else:
-        # Light theme - reset to defaults (minimal CSS)
-        st.markdown("""
-        <style>
-        /* Light theme - use Streamlit defaults */
-        .stApp {
-            background-color: #FFFFFF;
-            color: #262730;
-        }
-        </style>
-        """, unsafe_allow_html=True)
 
 
 def main():
     """Main application function"""
-    # Apply theme CSS first
-    apply_theme_css()
-
     # Initialize database
     try:
         init_database()
@@ -1007,30 +786,6 @@ def main():
                 )
             else:
                 st.error(f"Job {job_search} not found.")
-
-        st.markdown("---")
-
-        # Theme toggle - using buttons for immediate feedback
-        st.markdown("### Theme")
-        col_light, col_dark = st.columns(2)
-        with col_light:
-            if st.button(
-                "☀️ Light",
-                type="primary" if st.session_state.theme == 'light' else "secondary",
-                use_container_width=True
-            ):
-                if st.session_state.theme != 'light':
-                    st.session_state.theme = 'light'
-                    st.rerun()
-        with col_dark:
-            if st.button(
-                "🌙 Dark",
-                type="primary" if st.session_state.theme == 'dark' else "secondary",
-                use_container_width=True
-            ):
-                if st.session_state.theme != 'dark':
-                    st.session_state.theme = 'dark'
-                    st.rerun()
 
         st.markdown("---")
 
